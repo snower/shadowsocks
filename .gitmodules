@@ -1,3 +1,6 @@
-[submodule "ssloop"]
-	path = ssloop
-	url = https://github.com/clowwindy/ssloop.git
+#[submodule "ssloop"]
+#	path = ssloop
+#	url = https://github.com/snower/ssloop.git
+#[submodule "xstream"]
+#	path = stream
+#	url = https://github.com/snower/stream.git
