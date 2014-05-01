@@ -47,20 +47,21 @@ class Response(object):
         self.conn.on('data', self.on_data)
         self.conn.on('close', self.on_close)
         self.conn.on('end', self.on_end)
-        self.conn.connect((self.request.remote_addr,self.request.remote_port))
+        self.conn.connect((self.request.remote_addr,self.request.remote_port),30)
 
     def on_connect(self, s):
         self.is_connected=True
-        if self.buffer:self.write("".join(self.buffer))
+        if self.buffer:
+            self.write("".join(self.buffer))
 
     def on_data(self, s, data):
         self.request.write(data)
 
     def on_close(self, s):
-        pass
+        self.request.end()
 
     def on_end(self, s):
-        self.request.end()
+        pass
 
     def write(self,data):
         if self.is_connected:
@@ -130,7 +131,7 @@ class Request(object):
         if self.response:
             self.response.end()
         self._requests.remove(self)
-        logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.data_count),format_data_count(self.response.data_count if self.response else 0))
+        logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
         data = self.encryptor.encrypt(data)
@@ -156,5 +157,6 @@ if __name__ == '__main__':
         server = Server('0.0.0.0',config.PORT)
         server.on('session', Request.on_session)
         server.listen()
-    except KeyboardInterrupt:
-        sys.exit(0)
+    except:
+        import traceback
+        traceback.print_exc()

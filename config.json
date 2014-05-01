@@ -1,8 +1,0 @@
-{
-    "server":"122.10.92.210",
-    "server_port":8399,
-    "local_port":1099,
-    "password":"snower",
-    "timeout":600,
-    "method":"aes-256-cfb"
-}

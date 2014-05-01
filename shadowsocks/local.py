@@ -34,7 +34,6 @@ from utils import *
 from xstream.session import BaseSession,Session
 import config
 
-
 class Response(object):
     def __init__(self, request):
         self.request = request
@@ -125,11 +124,12 @@ class Request(object):
             self.response.write(data)
 
     def on_end(self, s):
-        if self.response:self.response.end()
+       pass
 
     def on_close(self, s):
+        if self.response:self.response.end()
         self._requests.remove(self)
-        logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.data_count),format_data_count(self.response.data_count if self.response else 0))
+        logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
         self.conn.write(data)
@@ -147,12 +147,14 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        BaseSession._loop=ssloop.instance()
-        session=Session(config.SERVER,config.REMOTE_PORT,connect_count=10)
+        BaseSession.loop=ssloop.instance()
+        session=Session(config.SERVER,config.REMOTE_PORT,connect_count=15)
         s = ssloop.Server(('0.0.0.0', config.PORT))
         s.on('connection', Request.on_connection)
         s.listen()
         session.open()
-        BaseSession._loop.start()
+        BaseSession.loop.start()
     except:
+        import traceback
+        traceback.print_exc()
         session.close()
