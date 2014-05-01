@@ -36,7 +36,7 @@ import config
 
 class Response(object):
     def __init__(self, request):
-        self.conn = ssloop.Socket(BaseSession._loop)
+        self.conn = ssloop.Socket(BaseSession.loop)
         self.request = request
         self.is_connected=False
         self.buffer=[]
