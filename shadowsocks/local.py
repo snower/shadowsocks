@@ -149,9 +149,12 @@ class Request(object):
         server.remove_listener('connection', Request.on_connection)
         time.sleep(5)
         session=Session(config.SERVER,config.REMOTE_PORT,connect_count=15)
+        session.on("streaming",Request.on_session_streaming)
+        session.on("close",Request.on_session_close)
+        session.open()
 
     @staticmethod
-    def on_session_ready(s):
+    def on_session_streaming(s):
         server.on('connection', Request.on_connection)
 
 if __name__ == '__main__':
@@ -161,6 +164,10 @@ if __name__ == '__main__':
         logging.info("starting server at port %d ..." % config.PORT)
         session=Session(config.SERVER,config.REMOTE_PORT,connect_count=15)
         server=ssloop.Server((config.BIND_ADDR, config.PORT))
+
+        session.on("streaming",Request.on_session_streaming)
+        session.on("close",Request.on_session_close)
+
         server.listen()
         session.open()
     except:
