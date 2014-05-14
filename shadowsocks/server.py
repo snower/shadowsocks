@@ -154,7 +154,7 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        server = Server('0.0.0.0',config.PORT)
+        server = Server(config.BIND_ADDR,config.PORT)
         server.on('session', Request.on_session)
         server.listen()
     except:

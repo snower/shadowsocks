@@ -143,19 +143,26 @@ class Request(object):
     def on_connection(s, conn):
         Request._requests.append(Request(conn))
 
+    @staticmethod
+    def on_session_close(s):
+        global session
+        server.remove_listener('connection', Request.on_connection)
+        time.sleep(5)
+        session=Session(config.SERVER,config.REMOTE_PORT,connect_count=15)
+
+    @staticmethod
+    def on_session_ready(s):
+        server.on('connection', Request.on_connection)
+
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        BaseSession.loop=ssloop.instance()
         session=Session(config.SERVER,config.REMOTE_PORT,connect_count=15)
-        s = ssloop.Server(('0.0.0.0', config.PORT))
-        s.on('connection', Request.on_connection)
-        s.listen()
+        server=ssloop.Server((config.BIND_ADDR, config.PORT))
+        server.listen()
         session.open()
-        BaseSession.loop.start()
     except:
         import traceback
         traceback.print_exc()
-        session.close()
