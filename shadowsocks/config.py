@@ -15,6 +15,7 @@ BIND_ADDR=config.get("bind_addr","0.0.0.0")
 PORT = config['local_port']
 KEY = config['password']
 METHOD = config.get('method', None)
+TIME_OUT=config.get("time_out",60)
 
 argv = sys.argv[1:]
 
