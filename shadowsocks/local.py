@@ -84,6 +84,7 @@ class Request(object):
             self.protocol_parse_end=True
             self.response=Response(self)
             self.response.write(self.encryptor.encrypt("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data])))
+            logging.info('connecting %s:%s %s',self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
 
     def on_data(self, s, data):
         if self.protocol is None:
