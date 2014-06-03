@@ -77,7 +77,6 @@ class Request(object):
     _requests=[]
     def __init__(self, stream):
         self.stream=stream
-        self.stage = 0
         self.remote_addr = ''
         self.remote_port = 0
         self.header_length=0
@@ -90,41 +89,19 @@ class Request(object):
         self.stream.on('close', self.on_close)
 
     def parse_addr_info(self,data):
-        addr_type = ord(data[0])
-        if addr_type == 1:
-            self.remote_addr = socket.inet_ntoa(data[1:5])
-            self.remote_port = data[5:7]
-            self.header_length = 7
-        elif addr_type == 4:
-            self.remote_addr = socket.inet_ntop(data[1:17])
-            self.remote_port = data[17:19]
-            self.header_length = 19
-        elif addr_type == 3:
-            addr_len = ord(data[1])
-            self.remote_addr = data[2:2 + addr_len]
-            self.remote_port = data[2 + addr_len:2 + addr_len + 2]
-            self.header_length = 2 + addr_len + 2
-        else:
-            raise Exception(data)
-        self.remote_port = struct.unpack('>H', self.remote_port)[0]
-        if not self.remote_addr or not self.remote_port:
-            raise Exception(data)
+        addr_len=struct.unpack('>H',data[:2])[0]
+        self.remote_addr=data[2:addr_len+2]
+        self.remote_port=struct.unpack('>H',data[addr_len+2:addr_len+4])[0]
+        self.header_length=addr_len+4
 
     def on_data(self, s, data):
         data = self.encryptor.decrypt(data)
-        if self.stage == 0:
-            try:
-                self.parse_addr_info(data)
-            except:
-                logging.error(sys.exc_info())
-                self.end()
-                return
-
+        if self.response is None:
+            self.parse_addr_info(data)
             logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
             self.response = Response(self)
             self.response.write(data[self.header_length:])
-            self.stage = 5
-        elif self.stage == 5:
+        else:
             self.response.write(data)
 
     def on_close(self, s):
@@ -154,7 +131,7 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        server = Server(config.BIND_ADDR,config.PORT)
+        server = Server('0.0.0.0',20000) #config.BIND_ADDR,config.PORT)
         server.on('session', Request.on_session)
         server.listen()
     except:

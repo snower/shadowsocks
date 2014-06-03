@@ -31,6 +31,9 @@ import logging
 import socket
 import encrypt
 from utils import *
+from protocol import ProtocolParseEndError
+from protocol.http import HttpProtocol
+from protocol.sock5 import Sock5Protocol
 from xstream.session import BaseSession,Session
 import config
 
@@ -65,9 +68,8 @@ class Request(object):
         self.conn = conn
         self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
         self.response = None
-        self.remote_addr=''
-        self.remote_port=0
-        self.header_length=0
+        self.protocol=None
+        self.protocol_parse_end=False
         self.time=time.time()*1000
         self.data_count=0
 
@@ -75,53 +77,24 @@ class Request(object):
         conn.on('end', self.on_end)
         conn.on('close', self.on_close)
 
-    def hello(self,data):
-        self.write('\x05\00')
-        self.stage = 1
-
-    def parse_addr_info(self,data):
-        cmd = ord(data[1])
-        addr_type = ord(data[3])
-        # TODO check cmd == 1
-        if addr_type == 1:
-            self.remote_addr = socket.inet_ntoa(data[4:8])
-            self.remote_port = data[8:10]
-            self.header_length = 10
-        elif addr_type == 4:
-            self.remote_addr = socket.inet_ntop(data[4:20])
-            self.remote_port = data[20:22]
-            self.header_length = 22
-        elif addr_type == 3:
-            addr_len = ord(data[4])
-            self.remote_addr = data[5:5 + addr_len]
-            self.remote_port = data[5 + addr_len:5 + addr_len + 2]
-            self.header_length = 5 + addr_len + 2
-        else:
-            raise Exception(data)
-        self.remote_port = struct.unpack('>H', self.remote_port)[0]
-        if not self.remote_addr or not self.remote_port:
-            raise Exception(data)
+    def parse(self,data):
+        try:
+            self.protocol.parse(data)
+        except ProtocolParseEndError,e:
+            self.protocol_parse_end=True
+            self.response=Response(self)
+            self.response.write(self.encryptor.encrypt("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data])))
 
     def on_data(self, s, data):
-        if self.stage == 0:
-            self.hello(data)
-        elif self.stage == 1:
-            try:
-                self.parse_addr_info(data)
-            except:
-                logging.error(sys.exc_info())
-                self.end()
-                return
-
-            logging.info('connecting %s:%s %s',self.remote_addr, self.remote_port,len(self._requests))
-            self.write('\x05\x00\x00\x01\x00\x00\x00\x00\x10\x10')
-            self.response = Response(self)
-            self.response.write(self.encryptor.encrypt(data[3:]))
-            # TODO save other bytes
-            self.stage = 5
-        elif self.stage == 5:
-            data = self.encryptor.encrypt(data)
-            self.response.write(data)
+        if self.protocol is None:
+            if data=='\x05\x01\x00':
+                self.protocol=Sock5Protocol(self)
+            else:
+                self.protocol=HttpProtocol(self)
+        if not self.protocol_parse_end:
+            self.parse(data)
+        else:
+            self.response.write(self.encryptor.encrypt(data))
 
     def on_end(self, s):
        pass
@@ -130,7 +103,7 @@ class Request(object):
         if self.response:
             self.response.end()
         self._requests.remove(self)
-        logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
+        logging.info('connected %s:%s %s %sms %s/%s',self.protocol.remote_addr, self.protocol.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
         self.conn.write(data)
