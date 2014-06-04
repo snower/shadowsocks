@@ -64,6 +64,7 @@ class Response(object):
         pass
 
     def write(self,data):
+        if not data:return
         if self.is_connected:
             self.conn.write(data)
             self.data_count+=len(data)

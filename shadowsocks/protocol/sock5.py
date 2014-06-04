@@ -18,14 +18,8 @@ class Sock5Protocol(Protocol):
     def parse(self,data):
         if self.stage == 0:
             self.hello(data)
-            return 0
         elif self.stage == 1:
-            try:
-                self.parse_addr_info(data)
-            except:
-                logging.error(sys.exc_info())
-                self.request.end()
-                return
+            self.parse_addr_info(data)
             self.request.write('\x05\x00\x00\x01\x00\x00\x00\x00\x10\x10')
             raise ProtocolParseEndError(data[self.header_length:])
 

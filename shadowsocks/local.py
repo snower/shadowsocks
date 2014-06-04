@@ -85,10 +85,13 @@ class Request(object):
             self.response=Response(self)
             self.response.write(self.encryptor.encrypt("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data])))
             logging.info('connecting %s:%s %s',self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
+        except:
+            logging.error(sys.exc_info())
+            self.end()
 
     def on_data(self, s, data):
         if self.protocol is None:
-            if data=='\x05\x01\x00':
+            if data[0]=='\x05':
                 self.protocol=Sock5Protocol(self)
             else:
                 self.protocol=HttpProtocol(self)
