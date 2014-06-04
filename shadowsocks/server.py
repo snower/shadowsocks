@@ -90,18 +90,28 @@ class Request(object):
         self.stream.on('close', self.on_close)
 
     def parse_addr_info(self,data):
-        addr_len=struct.unpack('>H',data[:2])[0]
-        self.remote_addr=data[2:addr_len+2]
-        self.remote_port=struct.unpack('>H',data[addr_len+2:addr_len+4])[0]
-        self.header_length=addr_len+4
+        try:
+            addr_len=struct.unpack('>H',data[:2])[0]
+            self.remote_addr=data[2:addr_len+2]
+            self.remote_port=struct.unpack('>H',data[addr_len+2:addr_len+4])[0]
+            self.header_length=addr_len+4
+        except Exception,e:
+            logging.error("parse addr error: %s %s",e,data)
+            self.end()
+            return False
+        if not self.remote_addr or not self.remote_port:
+            logging.error("parse addr error: %s %s %s",data,self.remote_addr,self.remote_port)
+            self.end()
+            return False
+        return True
 
     def on_data(self, s, data):
         data = self.encryptor.decrypt(data)
         if self.response is None:
-            self.parse_addr_info(data)
-            logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
-            self.response = Response(self)
-            self.response.write(data[self.header_length:])
+            if self.parse_addr_info(data):
+                logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
+                self.response = Response(self)
+                self.response.write(data[self.header_length:])
         else:
             self.response.write(data)
 
