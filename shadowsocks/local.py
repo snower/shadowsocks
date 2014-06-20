@@ -139,7 +139,7 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        session=Session(config.SERVER,config.REMOTE_PORT,config.METHOD.replace("-","_"),config.KEY,connect_count=15)
+        session=Session(config.SERVER,config.REMOTE_PORT,config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=15)
         server=ssloop.Server((config.BIND_ADDR, config.PORT))
 
         session.on("streaming",Request.on_session_streaming)
