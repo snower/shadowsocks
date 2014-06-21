@@ -125,7 +125,7 @@ class Request(object):
         global session
         server.remove_listener('connection', Request.on_connection)
         time.sleep(0.1)
-        session=Session(config.SERVER,config.REMOTE_PORT,connect_count=15)
+        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=15)
         session.on("streaming",Request.on_session_streaming)
         session.on("close",Request.on_session_close)
         session.open()
