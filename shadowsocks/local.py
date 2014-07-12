@@ -122,17 +122,20 @@ class Request(object):
 
     @staticmethod
     def on_session_close(s):
-        global session
         server.remove_listener('connection', Request.on_connection)
-        time.sleep(0.1)
-        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=15)
-        session.on("streaming",Request.on_session_streaming)
-        session.on("close",Request.on_session_close)
-        session.open()
+        ssloop.current().timeout(5, Request.reopen_session)
 
     @staticmethod
     def on_session_streaming(s):
         server.on('connection', Request.on_connection)
+
+    @staticmethod
+    def reopen_session():
+        global session
+        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=15)
+        session.on("streaming",Request.on_session_streaming)
+        session.on("close",Request.on_session_close)
+        session.open()
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
