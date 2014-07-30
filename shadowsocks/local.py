@@ -132,7 +132,7 @@ class Request(object):
     @staticmethod
     def reopen_session():
         global session
-        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=15)
+        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=config.MAX_CONNECTIONS)
         session.on("streaming",Request.on_session_streaming)
         session.on("close",Request.on_session_close)
         session.open()
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=15)
+        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=config.MAX_CONNECTIONS)
         server=ssloop.Server((config.BIND_ADDR, config.PORT))
 
         session.on("streaming",Request.on_session_streaming)
