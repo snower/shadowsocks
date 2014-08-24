@@ -35,27 +35,69 @@ from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
 from protocol.sock5 import Sock5Protocol
 from xstream.session import BaseSession,Session
+from rule import Rule
 import config
+
+class PassResponse(object):
+    def __init__(self, request):
+        self.conn = ssloop.Socket(BaseSession.loop)
+        self.request = request
+        self.is_connected=False
+        self.buffer=[]
+        self.time=time.time()*1000
+        self.data_count=0
+
+        self.conn.on('connect', self.on_connect)
+        self.conn.on('data', self.on_data)
+        self.conn.on('close', self.on_close)
+        self.conn.on('end', self.on_end)
+        self.conn.connect((self.request.protocol.remote_addr,self.request.protocol.remote_port),30)
+
+    def on_connect(self, s):
+        self.is_connected=True
+        if self.buffer:
+            self.write("".join(self.buffer))
+
+    def on_data(self, s, data):
+        self.request.write(data)
+
+    def on_close(self, s):
+        self.request.end()
+
+    def on_end(self, s):
+        pass
+
+    def write(self,data):
+        if not data:return
+        if self.is_connected:
+            self.conn.write(data)
+            self.data_count+=len(data)
+        else:
+            self.buffer.append(data)
+
+    def end(self):
+        self.conn.close()
 
 class Response(object):
     def __init__(self, request):
         self.request = request
-        self.stream = session.stream()
+        self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
         self.time=time.time()
         self.data_count=0
 
+        self.stream = session.stream()
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
 
     def on_data(self, s, data):
-        data = self.request.encryptor.decrypt(data)
+        data = self.encryptor.decrypt(data)
         self.request.write(data)
 
     def on_close(self, s):
         self.request.end()
 
     def write(self,data):
-        self.stream.write(data)
+        self.stream.write(self.encryptor.encrypt(data))
         self.data_count+=len(data)
 
     def end(self):
@@ -66,7 +108,6 @@ class Request(object):
     def __init__(self, conn):
         self.stage = 0
         self.conn = conn
-        self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
         self.response = None
         self.protocol=None
         self.protocol_parse_end=False
@@ -82,8 +123,14 @@ class Request(object):
             self.protocol.parse(data)
         except ProtocolParseEndError,e:
             self.protocol_parse_end=True
-            self.response=Response(self)
-            self.response.write(self.encryptor.encrypt("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data])))
+            rule = Rule(self.protocol.remote_addr)
+            result = rule.check() if config.DEFAULT_PASS else not rule.check()
+            if result:
+                self.response=Response(self)
+                self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+            else:
+                self.response = PassResponse(self)
+                self.response.write(e.data)
             logging.info('connecting %s:%s %s',self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
             logging.error(sys.exc_info())
@@ -98,7 +145,7 @@ class Request(object):
         if not self.protocol_parse_end:
             self.parse(data)
         else:
-            self.response.write(self.encryptor.encrypt(data))
+            self.response.write(data)
 
     def on_end(self, s):
        pass
