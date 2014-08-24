@@ -31,6 +31,7 @@ rules = [
         "github.com",
         "githubusercontent.com",
         "githubapp.com",
+        "gravatar.com",
         "bitbucket.org",
         "python.org",
         "readthedocs.org",
@@ -72,9 +73,9 @@ rules = [
 
 try:
     from rules import rules as user_rules
-    for i in range(user_rules):
+    for i in range(len(user_rules)):
         if len(rules) > i:
-            rules[i] = rules[i] & user_rules[i]
+            rules[i] = rules[i] | user_rules[i]
         else:
             rules.append(user_rules[i])
 except:
