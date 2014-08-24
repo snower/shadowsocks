@@ -20,7 +20,7 @@ METHOD = config.get('method', None)
 TIME_OUT=config.get("time_out",60)
 LOG_LEVEL = logging.INFO
 MAX_CONNECTIONS = int(config.get("max_connections", 10))
-DEFAULT_PASS = bool(config.get("default_pass", True))
+USE_RULE = bool(config.get("use_rule", True))
 
 for key, value in optlist:
     if key == '-p':

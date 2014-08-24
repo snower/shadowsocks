@@ -124,14 +124,15 @@ class Request(object):
         except ProtocolParseEndError,e:
             self.protocol_parse_end=True
             rule = Rule(self.protocol.remote_addr)
-            result = rule.check() if config.DEFAULT_PASS else not rule.check()
-            if result:
-                self.response=Response(self)
-                self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
-            else:
+            if config.USE_RULE and not rule.check():
+                by_pass = "direct"
                 self.response = PassResponse(self)
                 self.response.write(e.data)
-            logging.info('connecting %s:%s %s',self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
+            else:
+                by_pass = "proxy"
+                self.response=Response(self)
+                self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+            logging.info('connecting by %s %s:%s %s',by_pass, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
             logging.error(sys.exc_info())
             self.end()
