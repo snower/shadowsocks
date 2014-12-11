@@ -143,7 +143,7 @@ if __name__ == '__main__':
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = ssloop.instance()
-        server = Server(20001) #(config.PORT,config.BIND_ADDR,)
+        server = Server(config.PORT,config.BIND_ADDR,)
         server.on('session', Request.on_session)
         server.start()
         loop.start()
