@@ -30,13 +30,13 @@ import logging
 import socket
 import encrypt
 import ssloop
-from xstream.session import BaseSession,Server
+from xstream.server import Server
 from utils import *
 import config
 
 class Response(object):
     def __init__(self, request):
-        self.conn = ssloop.Socket(BaseSession.loop)
+        self.conn = ssloop.Socket()
         self.request = request
         self.is_connected=False
         self.buffer=[]
@@ -142,9 +142,11 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        server = Server(config.BIND_ADDR,config.PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY)
+        loop = ssloop.instance()
+        server = Server(config.PORT,config.BIND_ADDR,)
         server.on('session', Request.on_session)
-        server.listen()
+        server.start()
+        loop.start()
     except:
         import traceback
         traceback.print_exc()

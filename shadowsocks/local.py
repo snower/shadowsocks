@@ -34,13 +34,13 @@ from utils import *
 from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
 from protocol.sock5 import Sock5Protocol
-from xstream.session import BaseSession,Session
+from xstream.client import Client
 from rule import Rule
 import config
 
 class PassResponse(object):
     def __init__(self, request):
-        self.conn = ssloop.Socket(BaseSession.loop)
+        self.conn = ssloop.Socket()
         self.request = request
         self.is_connected=False
         self.buffer=[]
@@ -85,7 +85,7 @@ class Response(object):
         self.time=time.time()
         self.data_count=0
 
-        self.stream = session.stream()
+        self.stream = client.session().stream()
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
 
@@ -168,36 +168,21 @@ class Request(object):
     def on_connection(s, conn):
         Request._requests.append(Request(conn))
 
-    @staticmethod
-    def on_session_close(s):
-        server.remove_listener('connection', Request.on_connection)
-        ssloop.current().timeout(5, Request.reopen_session)
-
-    @staticmethod
-    def on_session_streaming(s):
-        server.on('connection', Request.on_connection)
-
-    @staticmethod
-    def reopen_session():
-        global session
-        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=config.MAX_CONNECTIONS)
-        session.on("streaming",Request.on_session_streaming)
-        session.on("close",Request.on_session_close)
-        session.open()
-
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        session=Session(config.SERVER,config.REMOTE_PORT,crypto_alg=config.METHOD.replace("-","_"),crypto_key=config.KEY,connect_count=config.MAX_CONNECTIONS)
+        loop = ssloop.instance()
+        client=Client(config.SERVER,config.REMOTE_PORT)
         server=ssloop.Server((config.BIND_ADDR, config.PORT))
 
-        session.on("streaming",Request.on_session_streaming)
-        session.on("close",Request.on_session_close)
+        client.on("session", Request.on_session_streaming)
+        server.on('connection', Request.on_connection)
 
         server.listen()
-        session.open()
+        client.open()
+        loop.start()
     except:
         import traceback
         traceback.print_exc()
