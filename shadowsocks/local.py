@@ -168,6 +168,10 @@ class Request(object):
     def on_connection(s, conn):
         Request._requests.append(Request(conn))
 
+    @staticmethod
+    def  on_session(client, session):
+        server.on('connection', Request.on_connection)
+
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
     encrypt.init_table(config.KEY, config.METHOD)
@@ -177,7 +181,7 @@ if __name__ == '__main__':
         client=Client(config.SERVER,config.REMOTE_PORT)
         server=ssloop.Server((config.BIND_ADDR, config.PORT))
 
-        server.on('connection', Request.on_connection)
+        client.on('session', Request.on_session)
 
         server.listen()
         client.open()
