@@ -84,10 +84,16 @@ class Response(object):
         self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
         self.time=time.time()
         self.data_count=0
+        self.stream = None
+        self.buffer = []
 
-        self.stream = client.session().stream()
-        self.stream.on('data', self.on_data)
-        self.stream.on('close', self.on_close)
+        def on_session(client, session):
+            self.stream = session.stream()
+            self.stream.on('data', self.on_data)
+            self.stream.on('close', self.on_close)
+            if self.buffer:
+                self.write("".join(self.buffer))
+        client.session(on_session)
 
     def on_data(self, s, data):
         data = self.encryptor.decrypt(data)
@@ -97,11 +103,15 @@ class Response(object):
         self.request.end()
 
     def write(self,data):
-        self.stream.write(self.encryptor.encrypt(data))
-        self.data_count+=len(data)
+        if self.stream:
+            self.stream.write(self.encryptor.encrypt(data))
+            self.data_count += len(data)
+        else:
+            self.buffer.append(data)
 
     def end(self):
-        self.stream.close()
+        if self.stream:
+            self.stream.close()
 
 class Request(object):
     _requests=[]
