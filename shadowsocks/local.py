@@ -188,7 +188,7 @@ if __name__ == '__main__':
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = ssloop.instance()
-        client=Client(config.SERVER,config.REMOTE_PORT)
+        client=Client(config.SERVER, config.REMOTE_PORT, 4, config.KEY, config.METHOD)
         server=ssloop.Server((config.BIND_ADDR, config.PORT))
 
         client.on('session', Request.on_session)
