@@ -136,12 +136,18 @@ class Request(object):
             rule = Rule(self.protocol.remote_addr)
             if config.USE_RULE and not rule.check():
                 by_pass = "direct"
-                self.response = PassResponse(self)
-                self.response.write(e.data)
+                if self.protocol.remote_addr.strip() and self.protocol.remote_port > 0:
+                    self.response = PassResponse(self)
+                    self.response.write(e.data)
+                else:
+                    self.end()
             else:
                 by_pass = "proxy"
-                self.response=Response(self)
-                self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+                if self.protocol.remote_addr.strip() and self.protocol.remote_port > 0:
+                    self.response=Response(self)
+                    self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+                else:
+                    self.end()
             logging.info('connecting by %s %s:%s %s',by_pass, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
             logging.error(sys.exc_info())
