@@ -20,9 +20,9 @@ class Sock5Protocol(Protocol):
         if self.stage == 0:
             self.hello(data)
         elif self.stage == 1:
-            self.handle_cmd(data)
+            inet_ut = self.handle_cmd(data)
             self.parse_addr_info(data)
-            raise ProtocolParseEndError(data[self.header_length:])
+            raise ProtocolParseEndError(data[self.header_length:], inet_ut)
 
     def hello(self,data):
         self.request.write('\x05\00')
@@ -32,11 +32,13 @@ class Sock5Protocol(Protocol):
         cmd = ord(data[1])
         if cmd == 0x01:
             self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", config.PORT)))
-        elif cmd == 0x03:
-            self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", config.PORT)))
-        else:
-            self.request.end()
-            raise Exception("sock5 unknown cmd %s", cmd)
+            return '\x01'
+        if cmd == 0x03:
+            port = self.request.start_udp_server()
+            self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", port)))
+            return '\x02'
+        self.request.end()
+        raise Exception("sock5 unknown cmd %s", cmd)
 
     def parse_addr_info(self,data):
         addr_type = ord(data[3])
@@ -58,3 +60,25 @@ class Sock5Protocol(Protocol):
         self.remote_port = struct.unpack('>H', self.remote_port)[0]
         if not self.remote_addr or not self.remote_port:
             raise Exception(data)
+
+    def parse_udp_addr_info(self, data):
+        addr_type = ord(data[3])
+        if addr_type == 1:
+            remote_addr = socket.inet_ntoa(data[4:8])
+            remote_port = data[8:10]
+            header_length = 10
+        elif addr_type == 4:
+            remote_addr = socket.inet_ntop(data[4:20])
+            remote_port = data[20:22]
+            header_length = 22
+        elif addr_type == 3:
+            addr_len = ord(data[4])
+            remote_addr = data[5:5 + addr_len]
+            remote_port = data[5 + addr_len:5 + addr_len + 2]
+            header_length = 5 + addr_len + 2
+        else:
+            raise Exception(data)
+        remote_port = struct.unpack('>H', remote_port)[0]
+        if not self.remote_addr or not self.remote_port:
+            raise Exception(data)
+        return remote_addr, remote_port, data[header_length:]
