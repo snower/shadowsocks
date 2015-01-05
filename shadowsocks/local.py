@@ -26,7 +26,7 @@ import os
 os.chdir(os.path.dirname(__file__) or '.')
 import time
 import struct
-import ssloop
+import sevent
 import logging
 import socket
 import encrypt
@@ -38,9 +38,9 @@ from xstream.client import Client
 from rule import Rule
 import config
 
-class PassResponse(object):
+class TcpPassResponse(object):
     def __init__(self, request):
-        self.conn = ssloop.Socket()
+        self.conn = sevent.tcp.Socket()
         self.request = request
         self.is_connected=False
         self.buffer=[]
@@ -78,7 +78,7 @@ class PassResponse(object):
     def end(self):
         self.conn.close()
 
-class Response(object):
+class TcpResponse(object):
     def __init__(self, request):
         self.request = request
         self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
@@ -113,7 +113,7 @@ class Response(object):
         if self.stream:
             self.stream.close()
 
-class Request(object):
+class TcpRequest(object):
     _requests=[]
     def __init__(self, conn):
         self.stage = 0
@@ -136,12 +136,12 @@ class Request(object):
             rule = Rule(self.protocol.remote_addr)
             if config.USE_RULE and not rule.check():
                 by_pass = "direct"
-                self.response = PassResponse(self)
+                self.response = TcpPassResponse(self)
                 self.response.write(e.data)
             else:
                 by_pass = "proxy"
-                self.response=Response(self)
-                self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+                self.response = TcpResponse(self)
+                self.response.write("".join(['\x01', struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
             logging.info('connecting by %s %s:%s %s',by_pass, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
             logging.error(sys.exc_info())
@@ -176,24 +176,59 @@ class Request(object):
 
     @staticmethod
     def on_connection(s, conn):
-        Request._requests.append(Request(conn))
+        TcpRequest._requests.append(TcpRequest(conn))
+
+class UdpRequest(sevent.EventEmitter):
+    def __init__(self):
+        self.session = None
+        self.stream = None
+        self.buffer = []
+
+    def on_session_close(self):
+        self.session = None
+        self.stream = None
+
+    def on_session(self, client, session):
+        self.session = session
+
+    def on_data(self, socket, address, data):
+        if self.session is None:
+            self.buffer.append((address, data))
+        else:
+            if self.stream is None:
+                self.stream = self.session.stream()
+            self.write(address, data)
+
+    def on_stream_data(self, stream, data):
+        pass
+
+    def on_stream_close(self):
+        self.stream
+
+    def write(self, address, data):
+        self.stream.write("".join("\x02", ))
+
+    def parse_address_info(self, data):
+        pass
 
     @staticmethod
     def  on_session(client, session):
-        server.on('connection', Request.on_connection)
+        tcp_server.on('connection', TcpRequest.on_connection)
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        loop = ssloop.instance()
+        loop = sevent.instance()
         client=Client(config.SERVER, config.REMOTE_PORT, 4, config.KEY, config.METHOD.replace("-", "_"))
-        server=ssloop.Server((config.BIND_ADDR, config.PORT))
+        tcp_server = sevent.tcp.Server()
+        udp_server = sevent.udp.Server()
 
-        client.on('session', Request.on_session)
+        client.on('session', TcpRequest.on_session)
 
-        server.listen()
+        tcp_server.listen((config.BIND_ADDR, config.PORT))
+        udp_server.bind((config.BIND_ADDR, config.PORT))
         client.open()
         loop.start()
     except:

@@ -7,6 +7,7 @@ import logging
 import struct
 import socket
 from protocol import Protocol,ProtocolParseEndError
+import config
 
 class Sock5Protocol(Protocol):
     def __init__(self,*args,**kwargs):
@@ -19,18 +20,26 @@ class Sock5Protocol(Protocol):
         if self.stage == 0:
             self.hello(data)
         elif self.stage == 1:
+            self.handle_cmd(data)
             self.parse_addr_info(data)
-            self.request.write('\x05\x00\x00\x01\x00\x00\x00\x00\x10\x10')
             raise ProtocolParseEndError(data[self.header_length:])
 
     def hello(self,data):
         self.request.write('\x05\00')
         self.stage = 1
 
-    def parse_addr_info(self,data):
+    def handle_cmd(self, data):
         cmd = ord(data[1])
+        if cmd == 0x01:
+            self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", config.PORT)))
+        elif cmd == 0x03:
+            self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", config.PORT)))
+        else:
+            self.request.end()
+            raise Exception("sock5 unknown cmd %s", cmd)
+
+    def parse_addr_info(self,data):
         addr_type = ord(data[3])
-        # TODO check cmd == 1
         if addr_type == 1:
             self.remote_addr = socket.inet_ntoa(data[4:8])
             self.remote_port = data[8:10]
