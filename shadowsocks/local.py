@@ -136,12 +136,27 @@ class TcpRequest(object):
             rule = Rule(self.protocol.remote_addr)
             if config.USE_RULE and not rule.check():
                 by_pass = "direct"
+<<<<<<< HEAD
                 self.response = TcpPassResponse(self)
                 self.response.write(e.data)
             else:
                 by_pass = "proxy"
                 self.response = TcpResponse(self)
                 self.response.write("".join(['\x01', struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+=======
+                if self.protocol.remote_addr.strip() and self.protocol.remote_port > 0:
+                    self.response = PassResponse(self)
+                    self.response.write(e.data)
+                else:
+                    self.end()
+            else:
+                by_pass = "proxy"
+                if self.protocol.remote_addr.strip() and self.protocol.remote_port > 0:
+                    self.response=Response(self)
+                    self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+                else:
+                    self.end()
+>>>>>>> FETCH_HEAD
             logging.info('connecting by %s %s:%s %s',by_pass, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
             logging.error(sys.exc_info())
