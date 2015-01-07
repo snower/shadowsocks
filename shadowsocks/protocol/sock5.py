@@ -31,11 +31,11 @@ class Sock5Protocol(Protocol):
     def handle_cmd(self, data):
         cmd = ord(data[1])
         if cmd == 0x01:
-            self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", config.PORT)))
+            self.request.write('\x05\x00\x00\x01%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack(">H", config.PORT)))
             return '\x01'
         if cmd == 0x03:
             port = self.request.start_udp_server()
-            self.request.write('\x05\x00\x00\x01\%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack("!H", port)))
+            self.request.write('\x05\x00\x00\x01%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack(">H", port)))
             return '\x02'
         self.request.end()
         raise Exception("sock5 unknown cmd %s", cmd)
