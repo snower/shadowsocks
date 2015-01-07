@@ -111,7 +111,7 @@ class Request(object):
     _requests=[]
     def __init__(self, stream):
         self.stream=stream
-        self.inet_ut = 0
+        self.inet_ut = '\x00'
         self.remote_addr = ''
         self.remote_port = 0
         self.header_length=0
@@ -125,7 +125,7 @@ class Request(object):
 
     def parse_addr_info(self,data):
         try:
-            self.inet_ut = ord(data[0])
+            self.inet_ut = data[0]
             addr_len=struct.unpack('>H',data[1:3])[0]
             self.remote_addr=data[3:addr_len+3]
             self.remote_port=struct.unpack('>H',data[addr_len+3:addr_len+5])[0]
@@ -145,7 +145,7 @@ class Request(object):
         if self.response is None:
             if self.parse_addr_info(data):
                 logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
-                if self.inet_ut == 1:
+                if self.inet_ut == '\x01':
                     self.response = Response(self)
                 else:
                     self.response = UdpResponse(self)

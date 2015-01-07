@@ -159,7 +159,7 @@ class Request(object):
     _requests=[]
     def __init__(self, conn):
         self.stage = 0
-        self.inet_ut = 1
+        self.inet_ut = '\x01'
         self.conn = conn
         self.response = None
         self.protocol=None
@@ -225,7 +225,7 @@ class Request(object):
         logging.info('connected %s:%s %s %sms %s/%s',self.protocol.remote_addr if self.protocol else '', self.protocol.remote_port if self.protocol else '',len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
-        if self.inet_ut == 1:
+        if self.inet_ut == '\x01':
             self.conn.write(data)
         else:
             self.udp_request.write(data)
