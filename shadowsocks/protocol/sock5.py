@@ -61,7 +61,7 @@ class Sock5Protocol(Protocol):
         if not self.remote_addr or not self.remote_port:
             raise Exception(data)
 
-    def parse_udp_addr_info(self, data):
+    def unpack_udp(self, data):
         addr_type = ord(data[3])
         if addr_type == 1:
             remote_addr = socket.inet_ntoa(data[4:8])
@@ -82,3 +82,12 @@ class Sock5Protocol(Protocol):
         if not self.remote_addr or not self.remote_port:
             raise Exception(data)
         return remote_addr, remote_port, data[header_length:]
+
+    def pack_udp(self, remote_addr, remote_port, data):
+        header = '\x00\x00\x00'
+        addrinfo = socket.getaddrinfo(remote_addr)
+        if addrinfo[0] == 2:
+            return "".join([header, struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
+        if addrinfo[0] == 30:
+            return "".join([header, struct.pack(">B", 4), socket.inet_pton(remote_addr), struct.pack(">H", remote_port), data])
+        return "".join([header, struct.pack(">BB", 4, len(remote_addr)), remote_addr, struct.pack(">H", remote_port), data])

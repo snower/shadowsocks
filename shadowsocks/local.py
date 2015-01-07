@@ -114,6 +114,47 @@ class Response(object):
         if self.stream:
             self.stream.close()
 
+class UdpRequest(object):
+    def __init__(self, request, protocol):
+        self.request = request
+        self.protocol = protocol
+        self.server = sevent.udp.Server()
+        self.server.on("data", self.on_data)
+
+        self.data_len = 0
+        self.data = ''
+
+    def bind(self):
+        self.server = sevent.udp.Server()
+        port = random.randint(2048, 65534)
+        self.server.bind(('0.0.0.0', port))
+        return port
+
+    def on_data(self, s, address, data):
+        addr, port, data = self.protocol.unpack_udp(data)
+        data = "".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port), data])
+        self.request.response.write(struct.pack(">I",len(data)) + data)
+
+    def write_data(self, address, port, data):
+        self.server.write((self.protocol.remote_addr, self.protocol.remote_port), self.protocol.pack_udp(address, port, data))
+
+    def write(self, data):
+        if self.data_len == 0:
+            self.data_len, = struct.unpack(">I", data[:4])
+        self.data += data[4:]
+        if len(self.data) >= self.data_len:
+            address_len, = struct.pack(">H", self.data[:2])
+            address = self.data[2:address_len + 2]
+            port = struct.pack(">H", self.data[address_len + 2:address_len + 4])
+            data = self.data[address_len + 4: address_len + 4 + self.data_len]
+            self.data = self.data[address_len + 4 + self.data_len:]
+            self.data_len = 0
+            self.write_data(address, port, data)
+
+    def close(self):
+        self.server.close()
+        self.server = None
+
 class Request(object):
     _requests=[]
     def __init__(self, conn):
@@ -124,7 +165,7 @@ class Request(object):
         self.protocol_parse_end=False
         self.time=time.time()*1000
         self.data_count=0
-        self.udp_server = None
+        self.udp_request = None
 
         conn.on('data', self.on_data)
         conn.on('end', self.on_end)
@@ -156,11 +197,8 @@ class Request(object):
             self.end()
 
     def start_udp_server(self):
-        self.udp_server = sevent.udp.Server()
-        port = random.randint(2048, 65534)
-        self.udp_server.bind(('0.0.0.0', port))
-        self.udp_server.on("data", self.on_udp_data)
-        return port
+        self.udp_request = UdpRequest(self, self.protocol)
+        return self.udp_request.bind()
 
     def on_data(self, s, data):
         if self.protocol is None:
@@ -173,27 +211,23 @@ class Request(object):
         else:
             self.response.write(data)
 
-    def on_udp_data(self, s, address, data):
-        addr, port, data = self.protocol.parse_udp_addr_info(data)
-        self.response.write("".join(['\x02', struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port), struct.pack(">H",len(data)), data]))
-
     def on_end(self, s):
        pass
 
     def on_close(self, s):
-        if self.udp_server:
-            self.udp_server.close()
         if self.response:
             self.response.end()
+        if self.udp_request:
+            self.udp_request.close()
         self._requests.remove(self)
         logging.info('connected %s:%s %s %sms %s/%s',self.protocol.remote_addr if self.protocol else '', self.protocol.remote_port if self.protocol else '',len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
-        if not self.udp_server:
+        if not self.udp_request:
             self.conn.write(data)
-            self.data_count+=len(data)
         else:
-            self.udp_server.w
+            self.udp_request.write(data)
+        self.data_count+=len(data)
 
     def end(self):
         self.conn.close()

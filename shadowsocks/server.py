@@ -29,14 +29,47 @@ import struct
 import logging
 import socket
 import encrypt
-import ssloop
+import sevent
 from xstream.server import Server
 from utils import *
 import config
 
+class UdpResponse(object):
+    def __init__(self, request):
+        self.request = request
+        self.conn = sevent.udp.Socket()
+        self.conn.on("data", self.on_data)
+
+        self.data_len = 0
+        self.data = 0
+        self.time=time.time()*1000
+        self.data_count=0
+
+    def on_data(self, s, address, data):
+        self.data_count += len(data)
+        data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", len(address[1])), data])
+        self.request.write(struct.pack(">I", len(data)) + data)
+
+    def write(self, data):
+        if self.data_len == 0:
+            self.data_len, = struct.unpack(">I", data[:4])
+        self.data += data[4:]
+        if len(self.data) >= self.data_len:
+            address_len, = struct.pack(">H", self.data[:2])
+            address = self.data[2:address_len + 2]
+            port = struct.pack(">H", self.data[address_len + 2:address_len + 4])
+            data = self.data[address_len + 4: address_len + 4 + self.data_len]
+            self.data = self.data[address_len + 4 + self.data_len:]
+            self.data_len = 0
+            self.conn.write((address, port), data)
+
+    def close(self):
+        self.conn.close()
+        self.conn = None
+
 class Response(object):
     def __init__(self, request):
-        self.conn = ssloop.Socket()
+        self.conn = sevent.tcp.Socket()
         self.request = request
         self.is_connected=False
         self.buffer=[]
@@ -78,6 +111,7 @@ class Request(object):
     _requests=[]
     def __init__(self, stream):
         self.stream=stream
+        self.inet_ut = 0
         self.remote_addr = ''
         self.remote_port = 0
         self.header_length=0
@@ -91,10 +125,11 @@ class Request(object):
 
     def parse_addr_info(self,data):
         try:
-            addr_len=struct.unpack('>H',data[:2])[0]
-            self.remote_addr=data[2:addr_len+2]
-            self.remote_port=struct.unpack('>H',data[addr_len+2:addr_len+4])[0]
-            self.header_length=addr_len+4
+            self.inet_ut = ord(data[0])
+            addr_len=struct.unpack('>H',data[:3])[0]
+            self.remote_addr=data[3:addr_len+3]
+            self.remote_port=struct.unpack('>H',data[addr_len+3:addr_len+5])[0]
+            self.header_length=addr_len+5
         except Exception,e:
             logging.error("parse addr error: %s %s",e,data)
             self.end()
@@ -110,7 +145,10 @@ class Request(object):
         if self.response is None:
             if self.parse_addr_info(data):
                 logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
-                self.response = Response(self)
+                if self.inet_ut == 1:
+                    self.response = Response(self)
+                else:
+                    self.response = UdpResponse(self)
                 self.response.write(data[self.header_length:])
         else:
             self.response.write(data)
@@ -142,7 +180,7 @@ if __name__ == '__main__':
     encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
-        loop = ssloop.instance()
+        loop = sevent.instance()
         server = Server(config.PORT, config.BIND_ADDR, config.KEY, config.METHOD.replace("-", "_"))
         server.on('session', Request.on_session)
         server.start()
