@@ -159,6 +159,7 @@ class Request(object):
     _requests=[]
     def __init__(self, conn):
         self.stage = 0
+        self.inet_ut = 1
         self.conn = conn
         self.response = None
         self.protocol=None
@@ -176,6 +177,7 @@ class Request(object):
             self.protocol.parse(data)
         except ProtocolParseEndError,e:
             self.protocol_parse_end=True
+            self.inet_ut = e.inet_ut
             rule = Rule(self.protocol.remote_addr)
             if config.USE_RULE and not rule.check():
                 by_pass = "direct"
@@ -223,7 +225,7 @@ class Request(object):
         logging.info('connected %s:%s %s %sms %s/%s',self.protocol.remote_addr if self.protocol else '', self.protocol.remote_port if self.protocol else '',len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
-        if not self.udp_request:
+        if self.inet_ut == 1:
             self.conn.write(data)
         else:
             self.udp_request.write(data)
