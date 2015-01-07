@@ -126,7 +126,7 @@ class Request(object):
     def parse_addr_info(self,data):
         try:
             self.inet_ut = ord(data[0])
-            addr_len=struct.unpack('>H',data[:3])[0]
+            addr_len=struct.unpack('>H',data[1:3])[0]
             self.remote_addr=data[3:addr_len+3]
             self.remote_port=struct.unpack('>H',data[addr_len+3:addr_len+5])[0]
             self.header_length=addr_len+5
