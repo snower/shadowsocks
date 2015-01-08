@@ -27,8 +27,6 @@ os.chdir(os.path.dirname(__file__) or '.')
 import time
 import struct
 import logging
-import socket
-import encrypt
 import sevent
 from xstream.server import Server
 from utils import *
@@ -116,7 +114,6 @@ class Request(object):
         self.remote_port = 0
         self.header_length=0
         self.response = None
-        self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
         self.time=time.time()*1000
         self.data_count=0
 
@@ -141,7 +138,6 @@ class Request(object):
         return True
 
     def on_data(self, s, data):
-        data = self.encryptor.decrypt(data)
         if self.response is None:
             if self.parse_addr_info(data):
                 logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
@@ -160,7 +156,6 @@ class Request(object):
         logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
-        data = self.encryptor.encrypt(data)
         self.stream.write(data)
         self.data_count+=len(data)
 
@@ -177,7 +172,6 @@ class Request(object):
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
-    encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = sevent.instance()

@@ -15,6 +15,8 @@ class Sock5Protocol(Protocol):
 
         self.stage=0
         self.header_length=0
+        self.local_addr = ''
+        self.local_port = ''
 
     def parse(self,data):
         if self.stage == 0:
@@ -22,6 +24,7 @@ class Sock5Protocol(Protocol):
         elif self.stage == 1:
             inet_ut = self.handle_cmd(data)
             self.parse_addr_info(data)
+            self.request.write('\x05\x00\x00\x01%s%s' % (socket.inet_aton(self.local_addr), struct.pack(">H", self.local_port)))
             raise ProtocolParseEndError(data[self.header_length:], inet_ut)
 
     def hello(self,data):
@@ -31,11 +34,11 @@ class Sock5Protocol(Protocol):
     def handle_cmd(self, data):
         cmd = ord(data[1])
         if cmd == 0x01:
-            self.request.write('\x05\x00\x00\x01%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack(">H", config.PORT)))
+            self.local_addr = config.BIND_ADDR
+            self.local_port = config.PORT
             return '\x01'
         if cmd == 0x03:
-            port = self.request.start_udp_server()
-            self.request.write('\x05\x00\x00\x01%s%s' % (socket.inet_aton(config.BIND_ADDR), struct.pack(">H", port)))
+            self.local_addr, self.local_port = self.request.start_udp_server()
             return '\x02'
         self.request.end()
         raise Exception("sock5 unknown cmd %s", cmd)
@@ -57,9 +60,7 @@ class Sock5Protocol(Protocol):
             self.header_length = 5 + addr_len + 2
         else:
             raise Exception(data)
-        self.remote_port = struct.unpack('>H', self.remote_port)[0]
-        if not self.remote_addr or not self.remote_port:
-            raise Exception(data)
+        self.remote_port, = struct.unpack('>H', self.remote_port)
 
     def unpack_udp(self, data):
         addr_type = ord(data[3])
@@ -78,9 +79,7 @@ class Sock5Protocol(Protocol):
             header_length = 5 + addr_len + 2
         else:
             raise Exception(data)
-        remote_port = struct.unpack('>H', remote_port)[0]
-        if not self.remote_addr or not self.remote_port:
-            raise Exception(data)
+        remote_port, = struct.unpack('>H', remote_port)
         return remote_addr, remote_port, data[header_length:]
 
     def pack_udp(self, remote_addr, remote_port, data):

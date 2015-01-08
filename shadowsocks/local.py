@@ -29,8 +29,7 @@ import time
 import struct
 import sevent
 import logging
-import socket
-import encrypt
+import traceback
 from utils import *
 from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
@@ -82,7 +81,6 @@ class PassResponse(object):
 class Response(object):
     def __init__(self, request):
         self.request = request
-        self.encryptor = encrypt.Encryptor(config.KEY, config.METHOD)
         self.time=time.time()
         self.data_count=0
         self.stream = None
@@ -97,7 +95,6 @@ class Response(object):
         client.session(on_session)
 
     def on_data(self, s, data):
-        data = self.encryptor.decrypt(data)
         self.request.write(data)
 
     def on_close(self, s):
@@ -105,7 +102,7 @@ class Response(object):
 
     def write(self,data):
         if self.stream:
-            self.stream.write(self.encryptor.encrypt(data))
+            self.stream.write(data)
             self.data_count += len(data)
         else:
             self.buffer.append(data)
@@ -121,6 +118,8 @@ class UdpRequest(object):
         self.server = sevent.udp.Server()
         self.server.on("data", self.on_data)
 
+        self.local_addr = ''
+        self.local_port = 0
         self.data_len = 0
         self.data = ''
 
@@ -128,15 +127,15 @@ class UdpRequest(object):
         self.server = sevent.udp.Server()
         port = random.randint(2048, 65534)
         self.server.bind(('0.0.0.0', port))
-        return port
+        return '0.0.0.0', port
 
     def on_data(self, s, address, data):
-        addr, port, data = self.protocol.unpack_udp(data)
+        self.local_addr, self.local_port, data = self.protocol.unpack_udp(data)
         data = "".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port), data])
         self.request.response.write(struct.pack(">I",len(data)) + data)
 
     def write_data(self, address, port, data):
-        self.server.write((self.protocol.remote_addr, self.protocol.remote_port), self.protocol.pack_udp(address, port, data))
+        self.server.write((self.local_addr, self.local_port), self.protocol.pack_udp(address, port, data))
 
     def write(self, data):
         if self.data_len == 0:
@@ -178,24 +177,21 @@ class Request(object):
         except ProtocolParseEndError,e:
             self.protocol_parse_end=True
             self.inet_ut = e.inet_ut
+            if e.inet_ut == '\x01' and self.protocol.remote_addr.strip() == '0.0.0.0' and not self.protocol.remote_port:
+                raise Exception("adder is empty %:%", self.protocol.remote_addr, self.protocol.remote_port)
+
             rule = Rule(self.protocol.remote_addr)
             if config.USE_RULE and not rule.check():
                 by_pass = "direct"
-                if self.protocol.remote_addr.strip() and self.protocol.remote_port > 0:
-                    self.response = PassResponse(self)
-                    self.response.write(e.data)
-                else:
-                    self.end()
+                self.response = PassResponse(self)
+                self.response.write(e.data)
             else:
                 by_pass = "proxy"
-                if self.protocol.remote_addr.strip() and self.protocol.remote_port > 0:
-                    self.response=Response(self)
-                    self.response.write("".join([e.inet_ut, struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
-                else:
-                    self.end()
+                self.response=Response(self)
+                self.response.write("".join([e.inet_ut, struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
             logging.info('connecting by %s %s:%s %s',by_pass, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
-            logging.error(sys.exc_info())
+            logging.error(traceback.format_exc())
             self.end()
 
     def start_udp_server(self):
@@ -244,7 +240,6 @@ class Request(object):
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
-    encrypt.init_table(config.KEY, config.METHOD)
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = sevent.instance()
