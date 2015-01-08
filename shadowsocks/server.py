@@ -131,7 +131,7 @@ class Request(object):
             logging.error("parse addr error: %s %s",e,data)
             self.end()
             return False
-        if not self.remote_addr or not self.remote_port:
+        if self.inet_ut == '\x01' and (self.remote_addr == '0.0.0.0' or not self.remote_port):
             logging.error("parse addr error: %s %s %s",data,self.remote_addr,self.remote_port)
             self.end()
             return False
@@ -145,7 +145,9 @@ class Request(object):
                     self.response = Response(self)
                 else:
                     self.response = UdpResponse(self)
-                self.response.write(data[self.header_length:])
+                data = data[self.header_length:]
+                if data:
+                    self.response.write(data)
         else:
             self.response.write(data)
 
