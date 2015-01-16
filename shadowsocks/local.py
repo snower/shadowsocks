@@ -34,6 +34,7 @@ from utils import *
 from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
 from protocol.sock5 import Sock5Protocol
+from protocol.redirect import RedirectProtocol
 from xstream.client import Client
 from rule import Rule
 import config
@@ -201,9 +202,14 @@ class Request(object):
     def on_data(self, s, data):
         if self.protocol is None:
             if data[0]=='\x05':
-                self.protocol=Sock5Protocol(self)
+                self.protocol = Sock5Protocol(self)
             else:
-                self.protocol=HttpProtocol(self)
+                http_data = data[:10]
+                index = http_data.find(' ')
+                if index > 0 and (http_data[:index].lower() == "connect" or http_data[index+1:index+5] == "http"):
+                    self.protocol = HttpProtocol(self)
+                else:
+                    self.protocol = RedirectProtocol(self)
         if not self.protocol_parse_end:
             self.parse(data)
         else:
