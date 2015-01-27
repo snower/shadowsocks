@@ -200,6 +200,7 @@ class Request(object):
         return self.udp_request.bind()
 
     def on_data(self, s, data):
+        data = data.read(-1)
         if self.protocol is None:
             if data[0]=='\x05':
                 self.protocol = Sock5Protocol(self)

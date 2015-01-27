@@ -86,6 +86,7 @@ class Response(object):
             self.write("".join(self.buffer))
 
     def on_data(self, s, data):
+        data = data.read(-1)
         self.request.write(data)
 
     def on_close(self, s):
