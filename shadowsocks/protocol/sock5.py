@@ -50,7 +50,7 @@ class Sock5Protocol(Protocol):
             self.remote_port = data[8:10]
             self.header_length = 10
         elif addr_type == 4:
-            self.remote_addr = socket.inet_ntop(data[4:20])
+            self.remote_addr = socket.inet_ntop(socket.AF_INET6, data[4:20])
             self.remote_port = data[20:22]
             self.header_length = 22
         elif addr_type == 3:
@@ -69,7 +69,7 @@ class Sock5Protocol(Protocol):
             remote_port = data[8:10]
             header_length = 10
         elif addr_type == 4:
-            remote_addr = socket.inet_ntop(data[4:20])
+            remote_addr = socket.inet_ntop(socket.AF_INET6, data[4:20])
             remote_port = data[20:22]
             header_length = 22
         elif addr_type == 3:
@@ -88,5 +88,5 @@ class Sock5Protocol(Protocol):
         if addrinfo[0] == 2:
             return "".join([header, struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
         if addrinfo[0] == 30:
-            return "".join([header, struct.pack(">B", 4), socket.inet_pton(remote_addr), struct.pack(">H", remote_port), data])
+            return "".join([header, struct.pack(">B", 4), socket.inet_pton(socket.AF_INET6, remote_addr), struct.pack(">H", remote_port), data])
         return "".join([header, struct.pack(">BB", 4, len(remote_addr)), remote_addr, struct.pack(">H", remote_port), data])
