@@ -235,7 +235,7 @@ class Request(object):
         self.data_count+=len(data)
 
     def end(self):
-        self.conn.close()
+        self.conn.end()
 
     @staticmethod
     def on_connection(s, conn):

@@ -104,7 +104,7 @@ class Response(object):
             self.buffer.append(data)
 
     def end(self):
-        self.conn.close()
+        self.conn.end()
 
 class Request(object):
     _requests=[]
