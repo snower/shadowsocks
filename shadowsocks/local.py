@@ -225,6 +225,7 @@ class Request(object):
         if self.udp_request:
             self.udp_request.close()
         self._requests.remove(self)
+        self.response = None
         logging.info('connected %s:%s %s %sms %s/%s',self.protocol.remote_addr if self.protocol else '', self.protocol.remote_port if self.protocol else '',len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
