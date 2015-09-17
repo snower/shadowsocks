@@ -156,6 +156,7 @@ class Request(object):
         if self.response:
             self.response.end()
         self._requests.remove(self)
+        self.response = None
         logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
 
     def write(self,data):
