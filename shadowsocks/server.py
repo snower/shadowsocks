@@ -169,10 +169,16 @@ class Request(object):
     @staticmethod
     def on_stream(session, stream):
         Request._requests.append(Request(stream))
+        
+    @staticmethod
+    def on_session_close(session, stream):
+        for request in list(Request._requests):
+            request.end()
 
     @staticmethod
     def on_session(server,session):
         session.on("stream",Request.on_stream)
+        session.on("close",Request.on_session_close)
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
