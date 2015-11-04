@@ -241,10 +241,16 @@ class Request(object):
     @staticmethod
     def on_connection(s, conn):
         Request._requests.append(Request(conn))
+        
+    @staticmethod
+    def on_session_close(session):
+        for request in list(Request._requests):
+            request.end()
 
     @staticmethod
     def  on_session(client, session):
         server.on('connection', Request.on_connection)
+        session.on('close', Request.on_session_close)
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
