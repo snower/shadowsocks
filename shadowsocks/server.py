@@ -86,7 +86,6 @@ class Response(object):
             self.write("".join(self.buffer))
 
     def on_data(self, s, data):
-        data = data.read(-1)
         self.request.write(data)
 
     def on_close(self, s):
@@ -99,9 +98,9 @@ class Response(object):
         if not data:return
         if self.is_connected:
             self.conn.write(data)
-            self.data_count+=len(data)
         else:
             self.buffer.append(data)
+        self.data_count+=len(data)
 
     def end(self):
         self.conn.end()
@@ -116,10 +115,15 @@ class Request(object):
         self.header_length=0
         self.response = None
         self.time=time.time()*1000
-        self.data_count=0
 
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
+
+    @property
+    def data_count(self):
+        if not self.stream:
+            return 0
+        return self.stream._send_data_len
 
     def parse_addr_info(self,data):
         try:
@@ -161,7 +165,6 @@ class Request(object):
 
     def write(self,data):
         self.stream.write(data)
-        self.data_count+=len(data)
 
     def end(self):
         self.stream.close()

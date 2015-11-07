@@ -46,7 +46,6 @@ class PassResponse(object):
         self.is_connected=False
         self.buffer=[]
         self.time=time.time()*1000
-        self.data_count=0
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
@@ -54,10 +53,14 @@ class PassResponse(object):
         self.conn.on('end', self.on_end)
         self.conn.connect((self.request.protocol.remote_addr,self.request.protocol.remote_port),30)
 
+    @property
+    def data_count(self):
+        return 0
+
     def on_connect(self, s):
         self.is_connected=True
-        if self.buffer:
-            self.write("".join(self.buffer))
+        for b in self.buffer:
+            self.write(b)
 
     def on_data(self, s, data):
         self.request.write(data)
@@ -72,7 +75,6 @@ class PassResponse(object):
         if not data:return
         if self.is_connected:
             self.conn.write(data)
-            self.data_count+=len(data)
         else:
             self.buffer.append(data)
 
@@ -83,7 +85,6 @@ class Response(object):
     def __init__(self, request):
         self.request = request
         self.time=time.time()
-        self.data_count=0
         self.stream = None
         self.buffer = []
 
@@ -91,9 +92,15 @@ class Response(object):
             self.stream = session.stream()
             self.stream.on('data', self.on_data)
             self.stream.on('close', self.on_close)
-            if self.buffer:
-                self.write("".join(self.buffer))
+            for b in self.buffer:
+                self.write(b)
         client.session(on_session)
+
+    @property
+    def data_count(self):
+        if not self.stream:
+            return 0
+        return self.stream._send_data_len
 
     def on_data(self, s, data):
         self.request.write(data)
@@ -104,7 +111,6 @@ class Response(object):
     def write(self,data):
         if self.stream:
             self.stream.write(data)
-            self.data_count += len(data)
         else:
             self.buffer.append(data)
 
@@ -165,12 +171,15 @@ class Request(object):
         self.protocol=None
         self.protocol_parse_end=False
         self.time=time.time()*1000
-        self.data_count=0
         self.udp_request = None
 
         conn.on('data', self.on_data)
         conn.on('end', self.on_end)
         conn.on('close', self.on_close)
+
+    @property
+    def data_count(self):
+        return 0
 
     def parse(self,data):
         try:
@@ -200,8 +209,8 @@ class Request(object):
         return self.udp_request.bind()
 
     def on_data(self, s, data):
-        data = data.read(-1)
         if self.protocol is None:
+            data = data.read(-1)
             if data[0]=='\x05':
                 self.protocol = Sock5Protocol(self)
             else:
@@ -212,6 +221,7 @@ class Request(object):
                 else:
                     self.protocol = RedirectProtocol(self)
         if not self.protocol_parse_end:
+            data = data.read(-1)
             self.parse(data)
         else:
             self.response.write(data)
@@ -233,7 +243,6 @@ class Request(object):
             self.conn.write(data)
         else:
             self.udp_request.write(data)
-        self.data_count+=len(data)
 
     def end(self):
         self.conn.end()
