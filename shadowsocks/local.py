@@ -222,12 +222,12 @@ class Request(object):
         if self.udp_request:
             self.udp_request.close()
         self._requests.remove(self)
-        self.response = None
         logging.info('connected %s:%s %s %.3fs %s/%s',self.protocol.remote_addr if self.protocol else '',
                      self.protocol.remote_port if self.protocol else '',
                      len(self._requests),time.time()-self.time,
                      format_data_count(self.response.stream._send_data_len if self.response and self.response.stream else 0),
                      format_data_count(self.response.stream._recv_data_len if self.response and self.response.stream else 0))
+        self.response = None
 
     def write(self,data):
         if self.inet_ut == '\x01':
