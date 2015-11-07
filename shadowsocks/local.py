@@ -221,7 +221,7 @@ class Request(object):
                 else:
                     self.protocol = RedirectProtocol(self)
         if not self.protocol_parse_end:
-            data = data.read(-1)
+            data = data if isinstance(data, basestring) else data.read(-1)
             self.parse(data)
         else:
             self.response.write(data)
