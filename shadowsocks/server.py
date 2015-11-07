@@ -40,11 +40,9 @@ class UdpResponse(object):
 
         self.data_len = 0
         self.data = 0
-        self.time=time.time()*1000
-        self.data_count=0
+        self.time=time.time()
 
     def on_data(self, s, address, data):
-        self.data_count += len(data)
         data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", len(address[1])), data])
         self.request.write(struct.pack(">I", len(data)) + data)
 
@@ -71,8 +69,7 @@ class Response(object):
         self.request = request
         self.is_connected=False
         self.buffer=[]
-        self.time=time.time()*1000
-        self.data_count=0
+        self.time=time.time()
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
@@ -95,12 +92,12 @@ class Response(object):
         pass
 
     def write(self,data):
-        if not data:return
+        if not data:
+            return
         if self.is_connected:
             self.conn.write(data)
         else:
             self.buffer.append(data)
-        self.data_count+=len(data)
 
     def end(self):
         self.conn.end()
@@ -114,16 +111,10 @@ class Request(object):
         self.remote_port = 0
         self.header_length=0
         self.response = None
-        self.time=time.time()*1000
+        self.time=time.time()
 
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
-
-    @property
-    def data_count(self):
-        if not self.stream:
-            return 0
-        return self.stream._send_data_len
 
     def parse_addr_info(self,data):
         try:
@@ -161,7 +152,10 @@ class Request(object):
             self.response.end()
         self._requests.remove(self)
         self.response = None
-        logging.info('connected %s:%s %s %sms %s/%s',self.remote_addr, self.remote_port,len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
+        logging.info('connected %s:%s %s %.3fs %s/%s',self.remote_addr, self.remote_port,len(self._requests),
+                     time.time()-self.time,
+                     format_data_count(self.stream._send_data_len),
+                     format_data_count(self.stream._recv_data_len))
 
     def write(self,data):
         self.stream.write(data)
@@ -174,12 +168,12 @@ class Request(object):
         Request._requests.append(Request(stream))
         
     @staticmethod
-    def on_session_close(session, stream):
+    def on_session_close(session):
         for request in list(Request._requests):
             request.end()
 
     @staticmethod
-    def on_session(server,session):
+    def on_session(server, session):
         session.on("stream",Request.on_stream)
         session.on("close",Request.on_session_close)
 

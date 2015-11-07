@@ -45,17 +45,14 @@ class PassResponse(object):
         self.request = request
         self.is_connected=False
         self.buffer=[]
-        self.time=time.time()*1000
+        self.time=time.time()
+        self.stream = None
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
         self.conn.on('close', self.on_close)
         self.conn.on('end', self.on_end)
         self.conn.connect((self.request.protocol.remote_addr,self.request.protocol.remote_port),30)
-
-    @property
-    def data_count(self):
-        return 0
 
     def on_connect(self, s):
         self.is_connected=True
@@ -95,12 +92,6 @@ class Response(object):
             for b in self.buffer:
                 self.write(b)
         client.session(on_session)
-
-    @property
-    def data_count(self):
-        if not self.stream:
-            return 0
-        return self.stream._send_data_len
 
     def on_data(self, s, data):
         self.request.write(data)
@@ -170,16 +161,12 @@ class Request(object):
         self.response = None
         self.protocol=None
         self.protocol_parse_end=False
-        self.time=time.time()*1000
+        self.time=time.time()
         self.udp_request = None
 
         conn.on('data', self.on_data)
         conn.on('end', self.on_end)
         conn.on('close', self.on_close)
-
-    @property
-    def data_count(self):
-        return 0
 
     def parse(self,data):
         try:
@@ -236,7 +223,11 @@ class Request(object):
             self.udp_request.close()
         self._requests.remove(self)
         self.response = None
-        logging.info('connected %s:%s %s %sms %s/%s',self.protocol.remote_addr if self.protocol else '', self.protocol.remote_port if self.protocol else '',len(self._requests),time.time()*1000-self.time,format_data_count(self.response.data_count if self.response else 0),format_data_count(self.data_count))
+        logging.info('connected %s:%s %s %.3fs %s/%s',self.protocol.remote_addr if self.protocol else '',
+                     self.protocol.remote_port if self.protocol else '',
+                     len(self._requests),time.time()-self.time,
+                     format_data_count(self.response.stream._send_data_len if self.response and self.response.stream else 0),
+                     format_data_count(self.response.stream._recv_data_len if self.response and self.response.stream else 0))
 
     def write(self,data):
         if self.inet_ut == '\x01':
