@@ -127,10 +127,13 @@ class UdpRequest(object):
         self.server.bind(('0.0.0.0', port))
         return '0.0.0.0', port
 
-    def on_data(self, s, address, data):
-        self.local_addr, self.local_port, data = self.protocol.unpack_udp(data)
-        data = "".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port), data])
-        self.request.response.write(struct.pack(">I",len(data)) + data)
+    def on_data(self, s, address, buffer):
+        data = buffer.next()
+        while data:
+            self.local_addr, self.local_port, data = self.protocol.unpack_udp(data)
+            data = "".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port), data])
+            self.request.response.write(struct.pack(">I",len(data)) + data)
+            data = buffer.next()
 
     def write_data(self, address, port, data):
         self.server.write((self.local_addr, self.local_port), self.protocol.pack_udp(address, port, data))

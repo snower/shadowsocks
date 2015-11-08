@@ -42,9 +42,12 @@ class UdpResponse(object):
         self.data = 0
         self.time=time.time()
 
-    def on_data(self, s, address, data):
-        data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", len(address[1])), data])
-        self.request.write(struct.pack(">I", len(data)) + data)
+    def on_data(self, s, address, buffer):
+        data = buffer.next()
+        while data:
+            data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", len(address[1])), data])
+            self.request.write(struct.pack(">I", len(data)) + data)
+            data = buffer.next()
 
     def write(self, data):
         if self.data_len == 0:
