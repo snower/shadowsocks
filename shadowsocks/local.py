@@ -119,7 +119,6 @@ class UdpRequest(object):
         self.local_addr = ''
         self.local_port = 0
         self.data_len = 0
-        self.data = ''
 
     def bind(self):
         self.server = sevent.udp.Server()
@@ -140,16 +139,13 @@ class UdpRequest(object):
 
     def write(self, data):
         if self.data_len == 0:
-            self.data_len, = struct.unpack(">I", data[:4])
-        self.data += data[4:]
-        if len(self.data) >= self.data_len:
-            address_len, = struct.pack(">H", self.data[:2])
-            address = self.data[2:address_len + 2]
-            port = struct.pack(">H", self.data[address_len + 2:address_len + 4])
-            data = self.data[address_len + 4: address_len + 4 + self.data_len]
-            self.data = self.data[address_len + 4 + self.data_len:]
+            self.data_len, = struct.unpack(">I", data.read(4))
+        if len(data) >= self.data_len:
+            address_len, = struct.pack(">H", data.read(2))
+            address = data.read(address_len)
+            port = struct.pack(">H", data.read(2))
+            self.write_data(address, port, data.read(self.data_len - address_len - 4))
             self.data_len = 0
-            self.write_data(address, port, data)
 
     def close(self):
         self.server.close()

@@ -39,7 +39,6 @@ class UdpResponse(object):
         self.conn.on("data", self.on_data)
 
         self.data_len = 0
-        self.data = 0
         self.time=time.time()
 
     def on_data(self, s, address, buffer):
@@ -51,16 +50,13 @@ class UdpResponse(object):
 
     def write(self, data):
         if self.data_len == 0:
-            self.data_len, = struct.unpack(">I", data[:4])
-        self.data += data[4:]
-        if len(self.data) >= self.data_len:
-            address_len, = struct.pack(">H", self.data[:2])
-            address = self.data[2:address_len + 2]
-            port = struct.pack(">H", self.data[address_len + 2:address_len + 4])
-            data = self.data[address_len + 4: address_len + 4 + self.data_len]
-            self.data = self.data[address_len + 4 + self.data_len:]
+            self.data_len, = struct.unpack(">I", data.read(4))
+        if len(data) >= self.data_len:
+            address_len, = struct.pack(">H", data.read(2))
+            address = data.read(address_len)
+            port = struct.pack(">H", data.read(2))
+            self.conn.write((address, port), data.read(self.data_len - address_len - 4))
             self.data_len = 0
-            self.conn.write((address, port), data)
 
     def close(self):
         self.conn.close()
@@ -71,7 +67,7 @@ class Response(object):
         self.conn = sevent.tcp.Socket()
         self.request = request
         self.is_connected=False
-        self.buffer=[]
+        self.buffer= None
         self.time=time.time()
 
         self.conn.on('connect', self.on_connect)
@@ -83,7 +79,7 @@ class Response(object):
     def on_connect(self, s):
         self.is_connected=True
         if self.buffer:
-            self.write("".join(self.buffer))
+            self.write(self.buffer)
 
     def on_data(self, s, data):
         self.request.write(data)
@@ -100,7 +96,7 @@ class Response(object):
         if self.is_connected:
             self.conn.write(data)
         else:
-            self.buffer.append(data)
+            self.buffer = data
 
     def end(self):
         self.conn.end()
@@ -121,11 +117,11 @@ class Request(object):
 
     def parse_addr_info(self,data):
         try:
-            self.inet_ut = data[0]
-            addr_len=struct.unpack('>H',data[1:3])[0]
-            self.remote_addr=data[3:addr_len+3]
-            self.remote_port=struct.unpack('>H',data[addr_len+3:addr_len+5])[0]
-            self.header_length=addr_len+5
+            self.inet_ut = data.read(1)
+            addr_len, = struct.unpack('>H',data.read(2))
+            self.remote_addr = data.read(addr_len)
+            self.remote_port, = struct.unpack('>H', data.read(2))
+            self.header_length = addr_len + 5
         except Exception,e:
             logging.error("parse addr error: %s %s",e,data)
             self.end()
@@ -139,12 +135,11 @@ class Request(object):
     def on_data(self, s, data):
         if self.response is None:
             if self.parse_addr_info(data):
-                logging.info('connecting %s:%s %s',self.remote_addr,self.remote_port,len(self._requests))
+                logging.info('connecting %s:%s %s',self.remote_addr, self.remote_port, len(self._requests))
                 if self.inet_ut == '\x01':
                     self.response = Response(self)
                 else:
                     self.response = UdpResponse(self)
-                data = data[self.header_length:]
                 if data:
                     self.response.write(data)
         else:
