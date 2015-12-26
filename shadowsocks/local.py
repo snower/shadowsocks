@@ -35,6 +35,7 @@ from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
 from protocol.sock5 import Sock5Protocol
 from protocol.redirect import RedirectProtocol
+from protocol.ss import SSProtocol
 from xstream.client import Client
 from rule import Rule
 import config
@@ -200,12 +201,8 @@ class Request(object):
             if data[0]=='\x05':
                 self.protocol = Sock5Protocol(self)
             else:
-                http_data = data[:10]
-                index = http_data.find(' ')
-                if index > 0 and (http_data[:index].lower() == "connect" or http_data[index+1:index+5] == "http"):
-                    self.protocol = HttpProtocol(self)
-                else:
-                    self.protocol = RedirectProtocol(self)
+                self.protocol = HttpProtocol(self)
+            self.parse(data)
         if not self.protocol_parse_end:
             data = data if isinstance(data, basestring) else data.read(-1)
             self.parse(data)
@@ -237,19 +234,52 @@ class Request(object):
     def end(self):
         self.conn.end()
 
-    @staticmethod
-    def on_connection(s, conn):
-        Request._requests.append(Request(conn))
+    @classmethod
+    def on_connection(cls, s, conn):
+        Request._requests.append(cls(conn))
         
-    @staticmethod
-    def on_session_close(session):
+    @classmethod
+    def on_session_close(cls, session):
         for request in list(Request._requests):
             request.end()
 
-    @staticmethod
-    def  on_session(client, session):
+    @classmethod
+    def on_session(cls, client, session):
         server.on('connection', Request.on_connection)
+        redirect_server.on('connection', RedirectRequest.on_connection)
+        ss_server.on('connection', SSRequest.on_connection)
         session.on('close', Request.on_session_close)
+
+class RedirectRequest(Request):
+    def on_data(self, s, data):
+        if self.protocol is None:
+            data = data.read(-1)
+            self.protocol = RedirectProtocol(self)
+            self.parse(data)
+        if not self.protocol_parse_end:
+            data = data if isinstance(data, basestring) else data.read(-1)
+            self.parse(data)
+        else:
+            self.response.write(data)
+
+class SSRequest(Request):
+    def on_data(self, s, data):
+        if self.protocol is None:
+            data = data.read(-1)
+            self.protocol = SSProtocol(self)
+            self.parse(data)
+        if not self.protocol_parse_end:
+            data = data if isinstance(data, basestring) else data.read(-1)
+            self.parse(data)
+        else:
+            data = data if isinstance(data, basestring) else data.read(-1)
+            data = self.protocol._crypto.decrypt(data)
+            self.response.write(data)
+
+    def write(self,data):
+        data = data if isinstance(data, basestring) else data.read(-1)
+        data = self.protocol._crypto.encrypt(data)
+        self.conn.write(data)
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
@@ -258,10 +288,14 @@ if __name__ == '__main__':
         loop = sevent.instance()
         client=Client(config.SERVER, config.REMOTE_PORT, 4, config.KEY, config.METHOD.replace("-", "_"))
         server = sevent.tcp.Server()
+        redirect_server = sevent.tcp.Server()
+        ss_server = sevent.tcp.Server()
 
         client.on('session', Request.on_session)
 
         server.listen((config.BIND_ADDR, config.PORT))
+        redirect_server.listen((config.BIND_ADDR, config.PORT + 1))
+        ss_server.listen((config.BIND_ADDR, config.PORT + 2))
         client.open()
         loop.start()
     except:

@@ -42,6 +42,8 @@ class HttpProtocol(Protocol):
             data=self.get_method(data)
         if self.method.lower()=="connect":
             self.parse_https(data)
-        else:
+        elif self.method.lower() in ("get", "post", "put", "options", "head", "delete", "patch"):
             self.parse_http(data)
+        else:
+            raise Exception("unknown method %s" % self.method)
 
