@@ -198,12 +198,12 @@ class Request(object):
     def on_data(self, s, data):
         if self.protocol is None:
             data = data.read(-1)
-            if data[0]=='\x05':
+            if data[0] == '\x05':
                 self.protocol = Sock5Protocol(self)
             else:
                 self.protocol = HttpProtocol(self)
             self.parse(data)
-        if not self.protocol_parse_end:
+        elif not self.protocol_parse_end:
             data = data if isinstance(data, basestring) else data.read(-1)
             self.parse(data)
         else:
@@ -256,7 +256,7 @@ class RedirectRequest(Request):
             data = data.read(-1)
             self.protocol = RedirectProtocol(self)
             self.parse(data)
-        if not self.protocol_parse_end:
+        elif not self.protocol_parse_end:
             data = data if isinstance(data, basestring) else data.read(-1)
             self.parse(data)
         else:
@@ -268,7 +268,7 @@ class SSRequest(Request):
             data = data.read(-1)
             self.protocol = SSProtocol(self)
             self.parse(data)
-        if not self.protocol_parse_end:
+        elif not self.protocol_parse_end:
             data = data if isinstance(data, basestring) else data.read(-1)
             self.parse(data)
         else:
