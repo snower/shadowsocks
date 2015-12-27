@@ -15,6 +15,7 @@ SERVER = config['server']
 REMOTE_PORT = config['server_port']
 BIND_ADDR=config.get("bind_addr","0.0.0.0")
 PORT = config['local_port']
+SSPORT = config.get("sslocal_port", PORT+1)
 KEY = config['password']
 METHOD = config.get('method', None)
 TIME_OUT=config.get("time_out",60)

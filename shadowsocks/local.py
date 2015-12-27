@@ -33,6 +33,7 @@ import traceback
 from utils import *
 from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
+from protocol.sock4 import Sock4Protocol
 from protocol.sock5 import Sock5Protocol
 from protocol.redirect import RedirectProtocol
 from protocol.ss import SSProtocol
@@ -172,21 +173,23 @@ class Request(object):
         try:
             self.protocol.parse(data)
         except ProtocolParseEndError,e:
-            self.protocol_parse_end=True
+            self.protocol_parse_end = True
             self.inet_ut = e.inet_ut
             if e.inet_ut == '\x01' and self.protocol.remote_addr.strip() == '0.0.0.0' and not self.protocol.remote_port:
                 raise Exception("adder is empty %:%", self.protocol.remote_addr, self.protocol.remote_port)
 
-            rule = Rule(self.protocol.remote_addr)
-            if config.USE_RULE and not rule.check():
-                by_pass = "direct"
-                self.response = PassResponse(self)
-                self.response.write(e.data)
-            else:
-                by_pass = "proxy"
-                self.response=Response(self)
-                self.response.write("".join([e.inet_ut, struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
-            logging.info('connecting by %s %s:%s %s',by_pass, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
+
+            if config.USE_RULE:
+                rule = Rule(self.protocol.remote_addr)
+                if  not rule.check():
+                    self.response = PassResponse(self)
+                    self.response.write(e.data)
+                    logging.info('%s connecting by direct %s:%s %s',self.protocol, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
+                    return
+
+            self.response=Response(self)
+            self.response.write("".join([e.inet_ut, struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
+            logging.info('%s connecting by proxy %s:%s %s',self.protocol, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
         except:
             logging.error(traceback.format_exc())
             self.end()
@@ -200,12 +203,18 @@ class Request(object):
             data = data.read(-1)
             if data[0] == '\x05':
                 self.protocol = Sock5Protocol(self)
+            elif data[0] == '\x04':
+                self.protocol = Sock4Protocol(self)
             else:
-                self.protocol = HttpProtocol(self)
+                http_data = data[:10]
+                index = http_data.find(' ')
+                if index > 0 and (http_data[:index].lower() == "connect" or http_data[index+1:index+5] == "http"):
+                    self.protocol = HttpProtocol(self)
+                else:
+                    self.protocol = RedirectProtocol(self)
             self.parse(data)
         elif not self.protocol_parse_end:
-            data = data if isinstance(data, basestring) else data.read(-1)
-            self.parse(data)
+            self.parse(data.read(-1))
         else:
             self.response.write(data)
 
@@ -218,7 +227,7 @@ class Request(object):
         if self.udp_request:
             self.udp_request.close()
         self._requests.remove(self)
-        logging.info('connected %s:%s %s %.3fs %s/%s',self.protocol.remote_addr if self.protocol else '',
+        logging.info('%s connected %s:%s %s %.3fs %s/%s', self.protocol, self.protocol.remote_addr if self.protocol else '',
                      self.protocol.remote_port if self.protocol else '',
                      len(self._requests),time.time()-self.time,
                      format_data_count(self.response.stream._send_data_len if self.response and self.response.stream else 0),
@@ -242,25 +251,14 @@ class Request(object):
     def on_session_close(cls, session):
         for request in list(Request._requests):
             request.end()
+        server.remove_listener('connection', Request.on_connection)
+        ss_server.remove_listener('connection', SSRequest.on_connection)
 
     @classmethod
     def on_session(cls, client, session):
         server.on('connection', Request.on_connection)
-        redirect_server.on('connection', RedirectRequest.on_connection)
         ss_server.on('connection', SSRequest.on_connection)
         session.on('close', Request.on_session_close)
-
-class RedirectRequest(Request):
-    def on_data(self, s, data):
-        if self.protocol is None:
-            data = data.read(-1)
-            self.protocol = RedirectProtocol(self)
-            self.parse(data)
-        elif not self.protocol_parse_end:
-            data = data if isinstance(data, basestring) else data.read(-1)
-            self.parse(data)
-        else:
-            self.response.write(data)
 
 class SSRequest(Request):
     def on_data(self, s, data):
@@ -269,16 +267,13 @@ class SSRequest(Request):
             self.protocol = SSProtocol(self)
             self.parse(data)
         elif not self.protocol_parse_end:
-            data = data if isinstance(data, basestring) else data.read(-1)
-            self.parse(data)
+            self.parse(data.read(-1))
         else:
-            data = data if isinstance(data, basestring) else data.read(-1)
-            data = self.protocol._crypto.decrypt(data)
+            data = self.protocol._crypto.decrypt(data.read(-1))
             self.response.write(data)
 
     def write(self,data):
-        data = data if isinstance(data, basestring) else data.read(-1)
-        data = self.protocol._crypto.encrypt(data)
+        data = self.protocol._crypto.encrypt(data.read(-1))
         self.conn.write(data)
 
 if __name__ == '__main__':
@@ -288,14 +283,12 @@ if __name__ == '__main__':
         loop = sevent.instance()
         client=Client(config.SERVER, config.REMOTE_PORT, 4, config.KEY, config.METHOD.replace("-", "_"))
         server = sevent.tcp.Server()
-        redirect_server = sevent.tcp.Server()
         ss_server = sevent.tcp.Server()
 
         client.on('session', Request.on_session)
 
         server.listen((config.BIND_ADDR, config.PORT))
-        redirect_server.listen((config.BIND_ADDR, config.PORT + 1))
-        ss_server.listen((config.BIND_ADDR, config.PORT + 2))
+        ss_server.listen((config.BIND_ADDR, config.SSPORT))
         client.open()
         loop.start()
     except:
