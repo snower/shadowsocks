@@ -251,8 +251,6 @@ class Request(object):
     def on_session_close(cls, session):
         for request in list(Request._requests):
             request.end()
-        server.remove_listener('connection', Request.on_connection)
-        ss_server.remove_listener('connection', SSRequest.on_connection)
 
     @classmethod
     def on_session(cls, client, session):
