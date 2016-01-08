@@ -58,7 +58,7 @@ class UdpResponse(object):
             self.conn.write((address, port), data.read(self.data_len - address_len - 4))
             self.data_len = 0
 
-    def close(self):
+    def end(self):
         self.conn.close()
         self.conn = None
 
