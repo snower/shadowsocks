@@ -16,7 +16,7 @@ class HttpProtocol(Protocol):
         return data[index+1:]
 
     def parse_addr(self,addr_info):
-        index=data.find(" ")
+        index=addr_info.find(" ")
         addr_info = addr_info[:index]
         addr_info=addr_info.split(":")
         self.remote_addr=addr_info[0]
