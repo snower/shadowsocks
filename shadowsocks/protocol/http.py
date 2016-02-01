@@ -17,7 +17,8 @@ class HttpProtocol(Protocol):
 
     def parse_addr(self,addr_info):
         index=addr_info.find(" ")
-        addr_info = addr_info[:index]
+        if index > 0:
+            addr_info = addr_info[:index]
         addr_info=addr_info.split(":")
         self.remote_addr=addr_info[0]
         if len(addr_info)==2:
