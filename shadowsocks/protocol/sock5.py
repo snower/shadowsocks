@@ -38,7 +38,8 @@ class Sock5Protocol(Protocol):
             self.local_port = config.PORT
             return '\x01'
         if cmd == 0x03:
-            self.local_addr, self.local_port = self.request.start_udp_server()
+            self.local_addr = config.BIND_ADDR
+            self.local_port = config.PORT
             return '\x02'
         self.request.end()
         raise Exception("sock5 unknown cmd %s", cmd)
