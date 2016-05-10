@@ -54,11 +54,11 @@ class UdpResponse(object):
     def on_data(self, s, address, buffer):
         data = buffer.next()
         while data:
-            data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", len(address[1])), data])
+            data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", address[1]), data])
             self.request.write(data)
             data = buffer.next()
 
-    def write(self, data):
+    def write(self, buffer):
         data = buffer.next()
         while data:
             address, data = self.parse_addr_info(data)
