@@ -153,7 +153,7 @@ class SSProtocol(Protocol):
 
     def pack_udp(self, remote_addr, remote_port, data):
         crypto = Crypto(config.KEY, config.METHOD.replace("-", "_"))
-        addrinfo = socket.getaddrinfo(remote_addr)
+        addrinfo = socket.getaddrinfo(remote_addr, remote_port, 0,socket.SOCK_DGRAM, socket.SOL_UDP)
         if addrinfo[0] == 2:
             data = "".join(
                 [struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
