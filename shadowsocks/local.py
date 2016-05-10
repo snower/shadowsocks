@@ -123,19 +123,19 @@ class UdpRequest(object):
     def on_data(self, s, address, buffer):
         data = buffer.next()
         while data:
-            remote_addr, remote_addr, data = self.protocol.unpack_udp(data)
+            remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
                 response = self.caches[address] = UdpResponse(self, address)
             else:
                 response = self.caches[address]
-            data = "".join([struct.pack(">H",len(remote_addr)), remote_addr, struct.pack('>H',remote_addr), data])
+            data = "".join([struct.pack(">H",len(remote_addr)), remote_addr, struct.pack('>H',remote_port), data])
             response.write(data)
             data = buffer.next()
 
     def write(self, address, buffer):
         data = buffer.next()
         while data:
-            data = self.protocol.pack_udp(data)
+            data = self.protocol.pack_udp(address[0], address[1], data)
             self.server.write(address, data)
             data = buffer.next()
 
@@ -299,8 +299,8 @@ if __name__ == '__main__':
         udp_server = sevent.udp.Server()
         ss_udp_server = sevent.udp.Server()
 
-        udp_request = UdpRequest(server, Sock5Protocol(None))
-        ss_udp_request = UdpRequest(server, SSProtocol(None))
+        udp_request = UdpRequest(udp_server, Sock5Protocol(None))
+        ss_udp_request = UdpRequest(ss_udp_server, SSProtocol(None))
 
         client.on('session', Request.on_session)
 
