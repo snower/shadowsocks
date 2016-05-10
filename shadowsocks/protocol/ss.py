@@ -128,3 +128,38 @@ class SSProtocol(Protocol):
         data = self._crypto.decrypt(data)
         _, self.remote_addr, self.remote_port, header_length = self.parse_header(data)
         raise ProtocolParseEndError(data[header_length:])
+
+    def unpack_udp(self, data):
+        crypto = Crypto(config.KEY, config.METHOD.replace("-", "_"))
+        data = crypto.decrypt(data)
+        addr_type = ord(data[0])
+        if addr_type == 1:
+            remote_addr = socket.inet_ntoa(data[1:5])
+            remote_port = data[5:7]
+            header_length = 7
+        elif addr_type == 4:
+            remote_addr = socket.inet_ntop(socket.AF_INET6, data[1:17])
+            remote_port = data[17:19]
+            header_length = 19
+        elif addr_type == 3:
+            addr_len = ord(data[1])
+            remote_addr = data[2:2 + addr_len]
+            remote_port = data[2 + addr_len:2 + addr_len + 2]
+            header_length = 2 + addr_len + 2
+        else:
+            raise Exception(data)
+        remote_port, = struct.unpack('>H', remote_port)
+        return remote_addr, remote_port, data[header_length:]
+
+    def pack_udp(self, remote_addr, remote_port, data):
+        crypto = Crypto(config.KEY, config.METHOD.replace("-", "_"))
+        addrinfo = socket.getaddrinfo(remote_addr)
+        if addrinfo[0] == 2:
+            data = "".join(
+                [struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
+        if addrinfo[0] == 30:
+            data = "".join([struct.pack(">B", 4), socket.inet_pton(socket.AF_INET6, remote_addr),
+                            struct.pack(">H", remote_port), data])
+        data = "".join(
+            [struct.pack(">BB", 4, len(remote_addr)), remote_addr, struct.pack(">H", remote_port), data])
+        return crypto.encrypt(data)
