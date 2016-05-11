@@ -85,9 +85,4 @@ class Sock5Protocol(Protocol):
 
     def pack_udp(self, remote_addr, remote_port, data):
         header = '\x00\x00\x00'
-        addrinfo = socket.getaddrinfo(remote_addr)
-        if addrinfo[0] == 2:
-            return "".join([header, struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
-        if addrinfo[0] == 30:
-            return "".join([header, struct.pack(">B", 4), socket.inet_pton(socket.AF_INET6, remote_addr), struct.pack(">H", remote_port), data])
-        return "".join([header, struct.pack(">BB", 4, len(remote_addr)), remote_addr, struct.pack(">H", remote_port), data])
+        return "".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])

@@ -126,22 +126,36 @@ class UdpRequest(object):
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
                 response = self.caches[address] = UdpResponse(self, address)
+                logging.info('%s udp connecting %s %s %s', self.protocol, address, remote_addr, remote_port)
             else:
                 response = self.caches[address]
             data = "".join([struct.pack(">H",len(remote_addr)), remote_addr, struct.pack('>H',remote_port), data])
             response.write(data)
             data = buffer.next()
 
+    def parse_addr_info(self, data):
+        try:
+            addr_len, = struct.unpack('>H', data[:2])
+            remote_addr = data[2: addr_len + 2]
+            remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
+            return (remote_addr, remote_port), data[addr_len + 4:]
+        except Exception, e:
+            logging.error("parse addr error: %s %s", e, data)
+            return None, ''
+
     def write(self, address, buffer):
         data = buffer.next()
         while data:
-            data = self.protocol.pack_udp(address[0], address[1], data)
-            self.server.write(address, data)
+            remote_address, data = self.parse_addr_info(data)
+            if address:
+                data = self.protocol.pack_udp(remote_address[0], remote_address[1], data)
+                self.server.write(address, data)
             data = buffer.next()
 
     def end(self, address):
         try:
             del self.caches[address]
+            logging.info('%s udp connected %s', self.protocol, address)
         except:
             pass
 

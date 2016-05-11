@@ -142,6 +142,7 @@ class Request(object):
         if self.response is None:
             if self.stream.capped:
                 self.response = UdpResponse(self)
+                logging.info('udp connecting %s', self.stream)
             else:
                 if self.parse_addr_info(data):
                     logging.info('connecting %s:%s %s',self.remote_addr, self.remote_port, len(self._requests))
@@ -155,11 +156,14 @@ class Request(object):
         if self.response:
             self.response.end()
         self._requests.remove(self)
+        if isinstance(self.response, Response):
+            logging.info('connected %s:%s %s %.3fs %s/%s',self.remote_addr, self.remote_port,len(self._requests),
+                         time.time()-self.time,
+                         format_data_count(self.stream._send_data_len),
+                         format_data_count(self.stream._recv_data_len))
+        else:
+            logging.info('udp connected %s', self.stream)
         self.response = None
-        logging.info('connected %s:%s %s %.3fs %s/%s',self.remote_addr, self.remote_port,len(self._requests),
-                     time.time()-self.time,
-                     format_data_count(self.stream._send_data_len),
-                     format_data_count(self.stream._recv_data_len))
 
     def write(self, data):
         self.stream.write(data)
