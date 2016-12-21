@@ -6,7 +6,7 @@ import struct
 import socket
 import hashlib
 from Crypto import Random
-from Crypto.Cipher import AES
+from xstream.openssl import OpenSSLCrypto
 from protocol import Protocol,ProtocolParseEndError
 import config
 
@@ -15,19 +15,9 @@ ADDRTYPE_IPV6 = 4
 ADDRTYPE_HOST = 3
 
 ALG_KEY_IV_LEN = {
-    'aes_128_cfb': (16, 16),
-    'aes_192_cfb': (24, 16),
-    'aes_256_cfb': (32, 16),
-    'bf_cfb': (16, 8),
-    'camellia_128_cfb': (16, 16),
-    'camellia_192_cfb': (24, 16),
-    'camellia_256_cfb': (32, 16),
-    'cast5_cfb': (16, 8),
-    'des_cfb': (8, 8),
-    'idea_cfb': (16, 8),
-    'rc2_cfb': (8, 8),
-    'rc4': (16, 0),
-    'seed_cfb': (16, 16),
+    'aes_128_cfb': (16, 16, OpenSSLCrypto),
+    'aes_192_cfb': (24, 16, OpenSSLCrypto),
+    'aes_256_cfb': (32, 16, OpenSSLCrypto),
 }
 
 def rand_string(length):
@@ -61,16 +51,16 @@ class Crypto(object):
 
     def get_cipher(self, op, iv):
         key, _ = EVP_BytesToKey(self._key, ALG_KEY_IV_LEN.get(self._alg)[0], ALG_KEY_IV_LEN.get(self._alg)[1])
-        return AES.new(key, AES.MODE_CFB, IV = iv)
+        return OpenSSLCrypto(self._alg.replace("_", "-"), key, iv, op)
 
     def encrypt(self, buf):
         if len(buf) == 0:
             return buf
         if self.iv_sent:
-            return self._encipher.encrypt(buf)
+            return self._encipher.update(buf)
         else:
             self.iv_sent = True
-            return self._iv + self._encipher.encrypt(buf)
+            return self._iv + self._encipher.update(buf)
 
     def decrypt(self, buf):
         if len(buf) == 0:
@@ -82,7 +72,7 @@ class Crypto(object):
             buf = buf[decipher_iv_len:]
             if len(buf) == 0:
                 return buf
-        return self.decipher.decrypt(buf)
+        return self.decipher.update(buf)
 
 class SSProtocol(Protocol):
     def __init__(self, *args, **kwargs):
