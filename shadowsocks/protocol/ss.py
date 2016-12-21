@@ -5,7 +5,8 @@
 import struct
 import socket
 import hashlib
-from M2Crypto import Rand,EVP
+from Crypto import Random
+from Crypto.Cipher import AES
 from protocol import Protocol,ProtocolParseEndError
 import config
 
@@ -30,7 +31,7 @@ ALG_KEY_IV_LEN = {
 }
 
 def rand_string(length):
-    return Rand.rand_bytes(length)
+    return Random.new().read(length)
 
 def EVP_BytesToKey(password, key_len, iv_len):
     m = []
@@ -60,16 +61,16 @@ class Crypto(object):
 
     def get_cipher(self, op, iv):
         key, _ = EVP_BytesToKey(self._key, ALG_KEY_IV_LEN.get(self._alg)[0], ALG_KEY_IV_LEN.get(self._alg)[1])
-        return EVP.Cipher(self._alg, key, iv, op, key_as_bytes=0, d='md5', salt=None, i=1, padding=1)
+        return AES.new(key, AES.MODE_CFB, IV = iv)
 
     def encrypt(self, buf):
         if len(buf) == 0:
             return buf
         if self.iv_sent:
-            return self._encipher.update(buf)
+            return self._encipher.encrypt(buf)
         else:
             self.iv_sent = True
-            return self._iv + self._encipher.update(buf)
+            return self._iv + self._encipher.encrypt(buf)
 
     def decrypt(self, buf):
         if len(buf) == 0:
@@ -81,7 +82,7 @@ class Crypto(object):
             buf = buf[decipher_iv_len:]
             if len(buf) == 0:
                 return buf
-        return self.decipher.update(buf)
+        return self.decipher.decrypt(buf)
 
 class SSProtocol(Protocol):
     def __init__(self, *args, **kwargs):
