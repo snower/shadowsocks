@@ -5,8 +5,7 @@
 import struct
 import socket
 import hashlib
-from Crypto import Random
-from xstream.openssl import OpenSSLCrypto
+from M2Crypto import Rand,EVP
 from protocol import Protocol,ProtocolParseEndError
 import config
 
@@ -15,13 +14,23 @@ ADDRTYPE_IPV6 = 4
 ADDRTYPE_HOST = 3
 
 ALG_KEY_IV_LEN = {
-    'aes_128_cfb': (16, 16, OpenSSLCrypto),
-    'aes_192_cfb': (24, 16, OpenSSLCrypto),
-    'aes_256_cfb': (32, 16, OpenSSLCrypto),
+    'aes_128_cfb': (16, 16),
+    'aes_192_cfb': (24, 16),
+    'aes_256_cfb': (32, 16),
+    'bf_cfb': (16, 8),
+    'camellia_128_cfb': (16, 16),
+    'camellia_192_cfb': (24, 16),
+    'camellia_256_cfb': (32, 16),
+    'cast5_cfb': (16, 8),
+    'des_cfb': (8, 8),
+    'idea_cfb': (16, 8),
+    'rc2_cfb': (8, 8),
+    'rc4': (16, 0),
+    'seed_cfb': (16, 16),
 }
 
 def rand_string(length):
-    return Random.new().read(length)
+    return Rand.rand_bytes(length)
 
 def EVP_BytesToKey(password, key_len, iv_len):
     m = []
@@ -51,7 +60,7 @@ class Crypto(object):
 
     def get_cipher(self, op, iv):
         key, _ = EVP_BytesToKey(self._key, ALG_KEY_IV_LEN.get(self._alg)[0], ALG_KEY_IV_LEN.get(self._alg)[1])
-        return OpenSSLCrypto(self._alg.replace("_", "-"), key, iv, op)
+        return EVP.Cipher(self._alg, key, iv, op, key_as_bytes=0, d='md5', salt=None, i=1, padding=1)
 
     def encrypt(self, buf):
         if len(buf) == 0:
