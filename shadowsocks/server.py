@@ -70,6 +70,57 @@ class UdpResponse(object):
         self.conn.close()
         self.conn = None
 
+class ProxyResponse(object):
+    def __init__(self, connection):
+        self.connection = connection
+        self.is_connected = False
+        self.buffer = []
+        self.time = time.time()
+        self.send_data_len = 0
+        self.recv_data_len = 0
+
+        if config.PROXY_ADDR:
+            self.proxy_connection = sevent.tcp.Socket()
+            self.proxy_connection.on('connect', self.on_connect)
+            self.proxy_connection.on('data', self.on_data)
+            self.proxy_connection.on('close', self.on_close)
+            self.proxy_connection.on('end', self.on_end)
+            self.proxy_connection.connect((config.PROXY_ADDR, config.PROXY_PORT), 30)
+        else:
+            self.proxy_connection = None
+
+    def on_connect(self, s):
+        self.is_connected = True
+        if self.buffer:
+            self.write("".join(self.buffer))
+
+    def on_data(self, s, data):
+        self.connection.write(data)
+        self.recv_data_len += len(data)
+
+    def on_close(self, s):
+        self.connection.end()
+
+    def on_end(self, s):
+        pass
+
+    def write(self, data):
+        if not self.connection:
+            return
+
+        if not data or not self.proxy_connection:
+            self.connection.close()
+            return
+
+        if self.is_connected:
+            self.proxy_connection.write(data)
+        else:
+            self.buffer.append(str(data))
+        self.send_data_len += len(data)
+
+    def end(self):
+        self.proxy_connection.end()
+
 class Response(object):
     def __init__(self, request):
         self.conn = sevent.tcp.Socket()
@@ -185,6 +236,16 @@ class Request(object):
         session.on("stream",Request.on_stream)
         session.on("close",Request.on_session_close)
 
+    @staticmethod
+    def on_connection(server, connection, data):
+        p = ProxyResponse(connection)
+        def on_close(connection):
+            logging.info("server %s proxy connection %s close %s %s %s %s", server, connection, config.PROXY_ADDR, config.PROXY_PORT,
+                         format_data_count(p.send_data_len), format_data_count(p.recv_data_len))
+        connection.on("close", on_close)
+        p.write(data)
+        logging.info("server %s proxy connection %s to %s %s", server, connection, config.PROXY_ADDR, config.PROXY_PORT)
+
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
     try:
@@ -192,6 +253,7 @@ if __name__ == '__main__':
         loop = sevent.instance()
         server = Server(config.PORT, config.BIND_ADDR, config.KEY, config.METHOD.replace("-", "_"))
         server.on('session', Request.on_session)
+        server.on("connection", Request.on_connection)
         server.start()
         loop.start()
     except:
