@@ -5,7 +5,6 @@
 import struct
 import socket
 import hashlib
-from M2Crypto import Rand,EVP
 from protocol import Protocol,ProtocolParseEndError
 import config
 
@@ -13,24 +12,9 @@ ADDRTYPE_IPV4 = 1
 ADDRTYPE_IPV6 = 4
 ADDRTYPE_HOST = 3
 
-ALG_KEY_IV_LEN = {
-    'aes_128_cfb': (16, 16),
-    'aes_192_cfb': (24, 16),
-    'aes_256_cfb': (32, 16),
-    'bf_cfb': (16, 8),
-    'camellia_128_cfb': (16, 16),
-    'camellia_192_cfb': (24, 16),
-    'camellia_256_cfb': (32, 16),
-    'cast5_cfb': (16, 8),
-    'des_cfb': (8, 8),
-    'idea_cfb': (16, 8),
-    'rc2_cfb': (8, 8),
-    'rc4': (16, 0),
-    'seed_cfb': (16, 16),
-}
-
-def rand_string(length):
-    return Rand.rand_bytes(length)
+from xstream.crypto import ALG_KEY_IV_LEN
+from xstream.crypto import rand_string
+from xstream.crypto import get_evp
 
 def EVP_BytesToKey(password, key_len, iv_len):
     m = []
@@ -60,7 +44,7 @@ class Crypto(object):
 
     def get_cipher(self, op, iv):
         key, _ = EVP_BytesToKey(self._key, ALG_KEY_IV_LEN.get(self._alg)[0], ALG_KEY_IV_LEN.get(self._alg)[1])
-        return EVP.Cipher(self._alg, key, iv, op, key_as_bytes=0, d='md5', salt=None, i=1, padding=1)
+        return get_evp(self._alg, key, iv, op)
 
     def encrypt(self, buf):
         if len(buf) == 0:
