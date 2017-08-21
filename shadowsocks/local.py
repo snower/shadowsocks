@@ -108,7 +108,7 @@ class DnsResponse(object):
             self.request.write(self.address, address, data)
             data = buffer.next()
 
-    def on_data(self, s, data):
+    def on_data(self, s, buffer):
         data = buffer.next()
         while data:
             remote_address, data = self.parse_addr_info(data)
