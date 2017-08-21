@@ -30,6 +30,7 @@ import struct
 import sevent
 import logging
 import traceback
+import dnslib
 from utils import *
 from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
@@ -80,10 +81,63 @@ class PassResponse(object):
     def end(self):
         self.conn.close()
 
-class UdpResponse(object):
-    def __init__(self, request, address):
+class DnsResponse(object):
+    def __init__(self, request, address, remote_addr, remote_port):
         self.request = request
         self.address = address
+        self.remote_addr = remote_addr
+        self.remote_port = remote_port
+        self.time = time.time()
+        self.stream = None
+        self.buffer = []
+        self.conn = sevent.udp.Socket()
+        self.conn.on("data", self.on_data)
+
+        def on_session(client, session):
+            self.stream = session.stream(priority=1, capped=True)
+            self.stream.on('data', self.on_data)
+            self.stream.on('close', self.on_close)
+            for b in self.buffer:
+                self.write(b)
+
+        client.session(on_session)
+
+    def on_data(self, s, data):
+        self.request.write(self.address, data)
+
+    def on_close(self, s):
+        self.request.end(self.address)
+
+    def write(self, data):
+        try:
+            dns_record = dnslib.DNSRecord.parse(data)
+            if dns_record.questions:
+                rule = Rule(dns_record.questions[0].qname)
+                if not rule.check():
+                    self.conn.write(("114.114.114.114", 53), data)
+                    logging.info("direct nsloop %s", dns_record.questions[0].qname)
+                    return
+        except Exception as e:
+            logging.info("parse dns error:%s", e)
+
+        data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
+        if self.stream:
+            self.stream.write(data)
+        else:
+            self.buffer.append(data)
+
+    def end(self):
+        if self.stream:
+            self.stream.close()
+        if self.conn:
+            self.conn.close()
+
+class UdpResponse(object):
+    def __init__(self, request, address, remote_addr, remote_port):
+        self.request = request
+        self.address = address
+        self.remote_addr = remote_addr
+        self.remote_port = remote_port
         self.time=time.time()
         self.stream = None
         self.buffer = []
@@ -103,6 +157,7 @@ class UdpResponse(object):
         self.request.end(self.address)
 
     def write(self,data):
+        data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
         else:
@@ -125,11 +180,13 @@ class UdpRequest(object):
         while data:
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
-                response = self.caches[address] = UdpResponse(self, address)
+                if remote_port == 53:
+                    response = self.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
+                else:
+                    response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
                 logging.info('%s udp connecting %s %s %s', self.protocol, address, remote_addr, remote_port)
             else:
                 response = self.caches[address]
-            data = "".join([struct.pack(">H",len(remote_addr)), remote_addr, struct.pack('>H',remote_port), data])
             response.write(data)
             data = buffer.next()
 

@@ -10,9 +10,13 @@ class Rule(object):
         self.host = host
 
     def check(self):
+        if self.host in rules:
+            return True
+
         hosts = self.host.split(".")
-        for i in range(len(rules)):
-            host = ".".join(hosts[-(i+2):])
-            if  host in rules[i]:
-                return True
+        if len(rules) > 2:
+            for i in range(len(rules) - 2):
+                host = ".".join(hosts[-(i+2):])
+                if  host in rules:
+                    return True
         return False
