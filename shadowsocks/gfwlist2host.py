@@ -2,9 +2,11 @@
 #14-6-6
 # create by: snower
 
+import base64
 import json
 
 fp = open("gfwlist.txt")
+content = base64.decodestring(fp.read())
 
 rules = set([])
 
@@ -26,7 +28,7 @@ def parse(line):
         line = line[1:]
     return line
 
-for line in fp:
+for line in content.split("\n"):
     if "AutoProxy" in line:
         continue
 
