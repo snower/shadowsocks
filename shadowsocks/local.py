@@ -88,27 +88,41 @@ class DnsResponse(object):
         self.remote_addr = remote_addr
         self.remote_port = remote_port
         self.time = time.time()
-        self.stream = None
+        self.data_time = time.time()
         self.buffer = []
-        self.conn = sevent.udp.Socket()
-        self.conn.on("data", self.on_udp_data)
+        self.stream = None
+        self.conn = None
 
-        def on_session(client, session):
-            self.stream = session.stream(priority=1, capped=True)
-            self.stream.on('data', self.on_data)
-            self.stream.on('close', self.on_close)
-            for b in self.buffer:
-                self.write(b)
+        loop.timeout(15, self.on_timeout)
 
-        client.session(on_session)
+    def on_session(self, client, session):
+        self.stream = session.stream(priority=1, capped=True)
+        self.stream.on('data', self.on_data)
+        self.stream.on('close', self.on_close)
+        for b in self.buffer:
+            self.write(b)
+
+    def on_timeout(self):
+        if self.data_time >= 10:
+            if self.stream:
+                self.stream.close()
+            if self.conn:
+                self.conn.close()
+            self.request.end(self.address)
+            self.stream = None
+            self.conn = None
+        else:
+            loop.timeout(15, self.on_timeout)
 
     def on_udp_data(self, s, address, buffer):
+        self.data_time = time.time()
         data = buffer.next()
         while data:
             self.request.write(self.address, address, data)
             data = buffer.next()
 
     def on_data(self, s, buffer):
+        self.data_time = time.time()
         data = buffer.next()
         while data:
             remote_address, data = self.parse_addr_info(data)
@@ -116,9 +130,17 @@ class DnsResponse(object):
             data = buffer.next()
 
     def on_close(self, s):
+        if self.stream:
+            self.stream.close()
+        if self.conn:
+            self.conn.close()
         self.request.end(self.address)
+        self.stream = None
+        self.conn = None
 
     def write(self, data):
+        self.data_time = time.time()
+        host = ''
         try:
             dns_record = dnslib.DNSRecord.parse(data)
             if dns_record.questions:
@@ -127,23 +149,29 @@ class DnsResponse(object):
                     host = host[:-1]
                 rule = Rule(host)
                 if not rule.check():
+                    self.conn = sevent.udp.Socket()
+                    self.conn.on("data", self.on_udp_data)
                     self.conn.write(("114.114.114.114", 53), data)
-                    logging.info("direct nsloop %s", str(dns_record.questions[0].qname))
+                    logging.info("direct nsloop %s", host)
                     return
         except Exception as e:
             logging.info("parse dns error:%s", e)
 
+        client.session(self.on_session)
         data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
         else:
             self.buffer.append(data)
+        logging.info("proxy nsloop %s", host)
 
     def end(self):
         if self.stream:
             self.stream.close()
         if self.conn:
             self.conn.close()
+        self.stream = None
+        self.conn = None
 
     def parse_addr_info(self, data):
         try:
@@ -181,7 +209,10 @@ class UdpResponse(object):
             data = buffer.next()
 
     def on_close(self, s):
+        if self.stream:
+            self.stream.close()
         self.request.end(self.address)
+        self.stream = None
 
     def write(self,data):
         data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
@@ -193,6 +224,8 @@ class UdpResponse(object):
     def end(self):
         if self.stream:
             self.stream.close()
+        self.stream = None
+        self.conn = None
 
     def parse_addr_info(self, data):
         try:
