@@ -96,6 +96,9 @@ class DnsResponse(object):
         loop.timeout(15, self.on_timeout)
 
     def on_session(self, client, session):
+        if self.stream:
+            return
+        
         self.stream = session.stream(priority=1, capped=True)
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
