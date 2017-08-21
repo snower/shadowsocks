@@ -109,7 +109,11 @@ class DnsResponse(object):
             data = buffer.next()
 
     def on_data(self, s, data):
-        self.request.write(self.address, data)
+        data = buffer.next()
+        while data:
+            remote_address, data = self.parse_addr_info(data)
+            self.request.write(self.address, remote_address, data)
+            data = buffer.next()
 
     def on_close(self, s):
         self.request.end(self.address)
@@ -140,6 +144,16 @@ class DnsResponse(object):
             self.stream.close()
         if self.conn:
             self.conn.close()
+
+    def parse_addr_info(self, data):
+        try:
+            addr_len, = struct.unpack('>H', data[:2])
+            remote_addr = data[2: addr_len + 2]
+            remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
+            return (remote_addr, remote_port), data[addr_len + 4:]
+        except Exception, e:
+            logging.error("parse addr error: %s %s", e, data)
+            return None, ''
 
 class UdpResponse(object):
     def __init__(self, request, address, remote_addr, remote_port):
