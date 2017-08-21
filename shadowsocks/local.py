@@ -91,7 +91,7 @@ class DnsResponse(object):
         self.stream = None
         self.buffer = []
         self.conn = sevent.udp.Socket()
-        self.conn.on("data", self.on_data)
+        self.conn.on("data", self.on_udp_data)
 
         def on_session(client, session):
             self.stream = session.stream(priority=1, capped=True)
@@ -101,6 +101,12 @@ class DnsResponse(object):
                 self.write(b)
 
         client.session(on_session)
+
+    def on_udp_data(self, s, address, buffer):
+        data = buffer.next()
+        while data:
+            self.request.write(self.address, data)
+            data = buffer.next()
 
     def on_data(self, s, data):
         self.request.write(self.address, data)
@@ -112,10 +118,13 @@ class DnsResponse(object):
         try:
             dns_record = dnslib.DNSRecord.parse(data)
             if dns_record.questions:
-                rule = Rule(dns_record.questions[0].qname)
+                host = str(dns_record.questions[0].qname)
+                if host[-1] == ".":
+                    host = host[:-1]
+                rule = Rule(host)
                 if not rule.check():
                     self.conn.write(("114.114.114.114", 53), data)
-                    logging.info("direct nsloop %s", dns_record.questions[0].qname)
+                    logging.info("direct nsloop %s", str(dns_record.questions[0].qname))
                     return
         except Exception as e:
             logging.info("parse dns error:%s", e)
