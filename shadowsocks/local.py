@@ -101,6 +101,7 @@ class DnsResponse(object):
         self.stream.on('close', self.on_close)
         for b in self.buffer:
             self.write(b)
+        self.buffer = []
 
     def on_timeout(self):
         if self.data_time >= 10:
@@ -149,15 +150,17 @@ class DnsResponse(object):
                     host = host[:-1]
                 rule = Rule(host)
                 if not rule.check():
-                    self.conn = sevent.udp.Socket()
-                    self.conn.on("data", self.on_udp_data)
+                    if self.conn is None:
+                        self.conn = sevent.udp.Socket()
+                        self.conn.on("data", self.on_udp_data)
                     self.conn.write(("114.114.114.114", 53), data)
                     logging.info("direct nsloop %s", host)
                     return
         except Exception as e:
             logging.info("parse dns error:%s", e)
 
-        client.session(self.on_session)
+        if self.stream is None:
+            client.session(self.on_session)
         data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
