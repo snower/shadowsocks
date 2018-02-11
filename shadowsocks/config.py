@@ -25,7 +25,7 @@ TIME_OUT=config.get("time_out",60)
 LOG_LEVEL = logging.INFO
 MAX_CONNECTIONS = int(config.get("max_connections", 10))
 USE_RULE = bool(config.get("use_rule", False))
-LOCAL_NETWORK = bool(config.get("local_network", ''))
+LOCAL_NETWORK = str(config.get("local_network", ''))
 PROXY_ADDR = config.get("proxy_addr")
 PROXY_PORT = config.get("proxy_port", 443)
 
