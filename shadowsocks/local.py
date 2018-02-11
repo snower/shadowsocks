@@ -334,12 +334,21 @@ class Request(object):
                 raise Exception("adder is empty %:%", self.protocol.remote_addr, self.protocol.remote_port)
 
 
+            if config.LOCAL_NETWORK:
+                if self.protocol.remote_addr.startswith(config.LOCAL_NETWORK):
+                    self.response = PassResponse(self)
+                    self.response.write(e.data)
+                    logging.info('%s connecting by direct %s:%s %s', self.protocol, self.protocol.remote_addr,
+                                 self.protocol.remote_port, len(self._requests))
+                    return
+
             if config.USE_RULE:
                 rule = Rule(self.protocol.remote_addr)
                 if  not rule.check():
                     self.response = PassResponse(self)
                     self.response.write(e.data)
-                    logging.info('%s connecting by direct %s:%s %s',self.protocol, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
+                    logging.info('%s connecting by direct %s:%s %s',self.protocol, self.protocol.remote_addr,
+                                 self.protocol.remote_port,len(self._requests))
                     return
 
             self.response=Response(self)

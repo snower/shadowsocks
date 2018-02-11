@@ -9,19 +9,23 @@ import logging
 
 optlist, args = getopt.getopt(sys.argv[1:], 'c:s:p:k:b:l:m:v')
 config_file=dict(optlist)['-c'] if '-c' in dict(optlist) else 'config.json'
-with open(config_file, 'rb') as f:
-    config = json.load(f)
-SERVER = config['server']
-REMOTE_PORT = config['server_port']
+try:
+    with open(config_file, 'rb') as f:
+        config = json.load(f)
+except:
+    config = {}
+SERVER = config.get('server', "127.0.0.1")
+REMOTE_PORT = config.get('server_port', 443)
 BIND_ADDR=config.get("bind_addr","0.0.0.0")
-PORT = config['local_port']
+PORT = config.get('local_port', 1099)
 SSPORT = config.get("sslocal_port", PORT+1)
-KEY = config['password']
+KEY = config.get('password', '')
 METHOD = config.get('method', None)
 TIME_OUT=config.get("time_out",60)
 LOG_LEVEL = logging.INFO
 MAX_CONNECTIONS = int(config.get("max_connections", 10))
 USE_RULE = bool(config.get("use_rule", False))
+LOCAL_NETWORK = bool(config.get("local_network", False))
 PROXY_ADDR = config.get("proxy_addr")
 PROXY_PORT = config.get("proxy_port", 443)
 
