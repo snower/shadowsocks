@@ -5,7 +5,7 @@
 import time
 import json
 
-rules = {
+default_rules = {
     "google.com",
     "youtube.com",
     "ytimg.com",
@@ -18,6 +18,8 @@ rules = {
     "gstatic.com",
 }
 
+rules = set([])
+
 loaded_time = 0
 
 def load_rule():
@@ -25,6 +27,8 @@ def load_rule():
     if time.time() - loaded_time < 24 * 60 * 60:
         return
 
+    rules.clear()
+    rules.update(default_rules)
     try:
         with open("gfwlist_rule.json") as fp:
             gfwlist_rules = json.load(fp)
