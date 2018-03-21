@@ -82,7 +82,7 @@ class PassResponse(object):
         self.conn.close()
 
 class DnsResponse(object):
-    def __init__(self, request, address, remote_addr, remote_port):
+    def __init__(self, request, address, remote_addr, remote_port, is_udp = True):
         self.request = request
         self.address = address
         self.remote_addr = remote_addr
@@ -92,14 +92,18 @@ class DnsResponse(object):
         self.buffer = []
         self.stream = None
         self.conn = None
+        self.is_udp = is_udp
 
         loop.timeout(15, self.on_timeout)
 
     def on_session(self, client, session):
         if self.stream:
             return
-        
-        self.stream = session.stream(priority=1, capped=True)
+
+        if self.is_udp:
+            self.stream = session.stream(priority=1, capped=True)
+        else:
+            self.stream = session.stream()
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
         for b in self.buffer:
@@ -112,7 +116,10 @@ class DnsResponse(object):
                 self.stream.close()
             if self.conn:
                 self.conn.close()
-            self.request.end(self.address)
+            if self.is_udp:
+                self.request.end(self.address)
+            else:
+                self.request.end()
             self.stream = None
             self.conn = None
         else:
@@ -125,20 +132,30 @@ class DnsResponse(object):
             self.request.write(self.address, address, data)
             data = buffer.next()
 
+    def on_tcp_data(self, s, buffer):
+        self.data_time = time.time()
+        self.request.write(buffer)
+
     def on_data(self, s, buffer):
         self.data_time = time.time()
-        data = buffer.next()
-        while data:
-            remote_address, data = self.parse_addr_info(data)
-            self.request.write(self.address, remote_address, data)
+        if self.is_udp:
             data = buffer.next()
+            while data:
+                remote_address, data = self.parse_addr_info(data)
+                self.request.write(self.address, remote_address, data)
+                data = buffer.next()
+        else:
+            self.request.write(buffer)
 
     def on_close(self, s):
         if self.stream:
             self.stream.close()
         if self.conn:
             self.conn.close()
-        self.request.end(self.address)
+        if self.is_udp:
+            self.request.end(self.address)
+        else:
+            self.request.end()
         self.stream = None
         self.conn = None
 
@@ -146,7 +163,7 @@ class DnsResponse(object):
         self.data_time = time.time()
         host = ''
         try:
-            dns_record = dnslib.DNSRecord.parse(data)
+            dns_record = dnslib.DNSRecord.parse(data if self.is_udp else data[2:])
             if dns_record.questions:
                 host = str(dns_record.questions[0].qname)
                 if host[-1] == ".":
@@ -154,9 +171,22 @@ class DnsResponse(object):
                 rule = Rule(host)
                 if not rule.check():
                     if self.conn is None:
-                        self.conn = sevent.udp.Socket()
-                        self.conn.on("data", self.on_udp_data)
-                    self.conn.write(("114.114.114.114", 53), data)
+                        if self.is_udp:
+                            self.conn = sevent.udp.Socket()
+                            self.conn.on("data", self.on_udp_data)
+                            self.conn.write(("114.114.114.114", 53), data)
+                        else:
+                            self.conn = sevent.tcp.Socket()
+                            def on_connect():
+                                self.conn.write(data)
+
+                            def on_close():
+                                self.request.end()
+
+                            self.conn.on("connect", on_connect)
+                            self.conn.on("close", on_close)
+                            self.conn.on("data", self.on_tcp_data)
+                            self.conn.connect(("114.114.114.114", 53))
                     logging.info("direct nsloop %s", host)
                     return
         except Exception as e:
@@ -343,7 +373,11 @@ class Request(object):
                     return
                 
             if self.protocol.remote_port == 53:
-                print e.data
+                self.response =  DnsResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port, False)
+                self.response.write(e.data)
+                logging.info('%s connecting by dns %s:%s %s', self.protocol, self.protocol.remote_addr,
+                             self.protocol.remote_port, len(self._requests))
+                return
 
             if config.USE_RULE:
                 rule = Rule(self.protocol.remote_addr)
