@@ -177,10 +177,10 @@ class DnsResponse(object):
                             self.conn.write(("114.114.114.114", 53), data)
                         else:
                             self.conn = sevent.tcp.Socket()
-                            def on_connect():
+                            def on_connect(s):
                                 self.conn.write(data)
 
-                            def on_close():
+                            def on_close(s):
                                 self.request.end()
 
                             self.conn.on("connect", on_connect)

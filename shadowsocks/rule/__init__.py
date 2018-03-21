@@ -2,7 +2,7 @@
 #14-6-6
 # create by: snower
 
-from default import rules
+from default import rules, load_rule
 
 
 class Rule(object):
@@ -10,6 +10,8 @@ class Rule(object):
         self.host = host
 
     def check(self):
+        load_rule()
+        
         if self.host in rules:
             return True
 
