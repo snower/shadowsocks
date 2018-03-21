@@ -49,7 +49,8 @@ class PassResponse(object):
         self.is_connected=False
         self.buffer=[]
         self.time=time.time()
-        self.stream = None
+        self.send_data_len = 0
+        self.recv_data_len = 0
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
@@ -63,6 +64,7 @@ class PassResponse(object):
             self.write(b)
 
     def on_data(self, s, data):
+        self.recv_data_len += len(data)
         self.request.write(data)
 
     def on_close(self, s):
@@ -72,6 +74,7 @@ class PassResponse(object):
         pass
 
     def write(self,data):
+        self.send_data_len += len(data)
         if not data:return
         if self.is_connected:
             self.conn.write(data)
@@ -80,6 +83,12 @@ class PassResponse(object):
 
     def end(self):
         self.conn.close()
+
+    def get_send_data_len(self):
+        return self.send_data_len
+
+    def get_recv_data_len(self):
+        return self.recv_data_len
 
 class DnsResponse(object):
     def __init__(self, request, address, remote_addr, remote_port, is_udp = True):
@@ -93,6 +102,8 @@ class DnsResponse(object):
         self.stream = None
         self.conn = None
         self.is_udp = is_udp
+        self.send_data_len = 0
+        self.recv_data_len = 0
 
         loop.timeout(15, self.on_timeout)
 
@@ -126,6 +137,7 @@ class DnsResponse(object):
             loop.timeout(15, self.on_timeout)
 
     def on_udp_data(self, s, address, buffer):
+        self.recv_data_len += len(buffer)
         self.data_time = time.time()
         data = buffer.next()
         while data:
@@ -133,10 +145,12 @@ class DnsResponse(object):
             data = buffer.next()
 
     def on_tcp_data(self, s, buffer):
+        self.recv_data_len += len(buffer)
         self.data_time = time.time()
         self.request.write(buffer)
 
     def on_data(self, s, buffer):
+        self.recv_data_len += len(buffer)
         self.data_time = time.time()
         if self.is_udp:
             data = buffer.next()
@@ -161,6 +175,10 @@ class DnsResponse(object):
 
     def write(self, data):
         self.data_time = time.time()
+        if isinstance(data, sevent.Buffer):
+            data = data.read(-1)
+        self.send_data_len += len(data)
+
         host = ''
         try:
             dns_record = dnslib.DNSRecord.parse(data if self.is_udp else data[2:])
@@ -219,6 +237,12 @@ class DnsResponse(object):
             logging.error("parse addr error: %s %s", e, data)
             return None, ''
 
+    def get_send_data_len(self):
+        return self.send_data_len
+
+    def get_recv_data_len(self):
+        return self.recv_data_len
+
 class UdpResponse(object):
     def __init__(self, request, address, remote_addr, remote_port):
         self.request = request
@@ -272,6 +296,12 @@ class UdpResponse(object):
         except Exception, e:
             logging.error("parse addr error: %s %s", e, data)
             return None, ''
+
+    def get_send_data_len(self):
+        return self.stream._send_data_len if self.stream else 0
+
+    def get_recv_data_len(self):
+        return self.stream._recv_data_len if self.stream else 0
 
 class UdpRequest(object):
     caches= {}
@@ -338,6 +368,12 @@ class Response(object):
     def end(self):
         if self.stream:
             self.stream.close()
+
+    def get_send_data_len(self):
+        return self.stream._send_data_len if self.stream else 0
+
+    def get_recv_data_len(self):
+        return self.stream._recv_data_len if self.stream else 0
 
 class Request(object):
     _requests=[]
@@ -425,8 +461,8 @@ class Request(object):
         logging.info('%s connected %s:%s %s %.3fs %s/%s', self.protocol, self.protocol.remote_addr if self.protocol else '',
                      self.protocol.remote_port if self.protocol else '',
                      len(self._requests),time.time()-self.time,
-                     format_data_count(self.response.stream._send_data_len if self.response and self.response.stream else 0),
-                     format_data_count(self.response.stream._recv_data_len if self.response and self.response.stream else 0))
+                     format_data_count(self.response.get_send_data_len() if self.response else 0),
+                     format_data_count(self.response.get_recv_data_len() if self.response else 0))
         self.response = None
 
     def write(self,data):

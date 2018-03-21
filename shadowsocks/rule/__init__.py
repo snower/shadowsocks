@@ -11,7 +11,7 @@ class Rule(object):
 
     def check(self):
         load_rule()
-        
+
         if self.host in rules:
             return True
 
