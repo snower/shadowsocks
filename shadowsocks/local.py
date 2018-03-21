@@ -408,7 +408,7 @@ class Request(object):
                                  self.protocol.remote_port, len(self._requests))
                     return
                 
-            if self.protocol.remote_port == 53:
+            if isinstance(self.protocol, SSProtocol) and self.protocol.remote_port == 53:
                 self.response =  DnsResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port, False)
                 self.response.write(e.data)
                 logging.info('%s connecting by dns %s:%s %s', self.protocol, self.protocol.remote_addr,
