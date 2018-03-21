@@ -341,6 +341,9 @@ class Request(object):
                     logging.info('%s connecting by direct %s:%s %s', self.protocol, self.protocol.remote_addr,
                                  self.protocol.remote_port, len(self._requests))
                     return
+                
+            if self.protocol.remote_port == 53:
+                print e.data
 
             if config.USE_RULE:
                 rule = Rule(self.protocol.remote_addr)
