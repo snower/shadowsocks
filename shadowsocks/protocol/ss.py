@@ -71,7 +71,7 @@ class SSProtocol(Protocol):
     def __init__(self, *args, **kwargs):
         super(SSProtocol, self).__init__(*args, **kwargs)
 
-        self._crypto = Crypto(config.KEY, config.METHOD.replace("-", "_"))
+        self._crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
 
     def parse_header(self, data):
         addrtype = ord(data[0])
@@ -114,7 +114,7 @@ class SSProtocol(Protocol):
         raise ProtocolParseEndError(data[header_length:])
 
     def unpack_udp(self, data):
-        crypto = Crypto(config.KEY, config.METHOD.replace("-", "_"))
+        crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         data = crypto.decrypt(data)
         addr_type = ord(data[0])
         if addr_type == 1:
@@ -136,6 +136,6 @@ class SSProtocol(Protocol):
         return remote_addr, remote_port, data[header_length:]
 
     def pack_udp(self, remote_addr, remote_port, data):
-        crypto = Crypto(config.KEY, config.METHOD.replace("-", "_"))
+        crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         data = "".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
         return crypto.encrypt(data)

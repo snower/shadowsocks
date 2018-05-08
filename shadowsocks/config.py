@@ -24,6 +24,8 @@ MAX_CONNECTIONS = int(config.get("max_connections", 10))
 USE_RULE = bool(config.get("use_rule", False))
 PROXY_ADDR = config.get("proxy_addr")
 PROXY_PORT = config.get("proxy_port", 443)
+SSKEY = config.get("sspassword", KEY)
+SSMETHOD = config.get("ssmethod", METHOD)
 
 for key, value in optlist:
     if key == '-p':
