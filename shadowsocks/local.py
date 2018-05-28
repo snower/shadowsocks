@@ -44,9 +44,12 @@ from rule import Rule
 import config
 
 class PassResponse(object):
-    def __init__(self, request):
+    def __init__(self, request, protocol, remote_addr, remote_port):
         self.conn = sevent.tcp.Socket()
         self.request = request
+        self.protocol = protocol
+        self.remote_addr = remote_addr
+        self.remote_port = remote_port
         self.is_connected=False
         self.buffer=[]
         self.time=time.time()
@@ -158,7 +161,8 @@ class DnsResponse(object):
     def on_tcp_data(self, s, buffer):
         self.recv_data_len += len(buffer)
         self.data_time = time.time()
-        self.request.write(buffer)
+        if self.request:
+            self.request.write(buffer)
 
     def on_data(self, s, buffer):
         self.recv_data_len += len(buffer)
@@ -204,6 +208,7 @@ class DnsResponse(object):
                             self.conn = sevent.udp.Socket()
                             self.conn.on("data", self.on_udp_data)
                             self.conn.write(("114.114.114.114", 53), data)
+                            self.remote_addr = "114.114.114.114"
                         else:
                             self.conn = sevent.tcp.Socket()
                             try:
@@ -226,6 +231,8 @@ class DnsResponse(object):
                             self.conn.on("close", on_close)
                             self.conn.on("data", self.on_tcp_data)
                             self.conn.connect(("114.114.114.114", 53))
+                            self.remote_addr = "114.114.114.114"
+
                     logging.info("direct nsloop %s", host)
                     return
         except Exception as e:
@@ -341,7 +348,7 @@ class UdpRequest(object):
                     response = self.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
                 else:
                     response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
-                logging.info('%s udp connecting %s %s %s', self.protocol, address, remote_addr, remote_port)
+                logging.info('%s udp connecting %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
             else:
                 response = self.caches[address]
             response.write(data)
@@ -360,8 +367,11 @@ class UdpRequest(object):
             pass
 
 class Response(object):
-    def __init__(self, request):
+    def __init__(self, request, protocol, remote_addr, remote_port):
         self.request = request
+        self.protocol = protocol
+        self.remote_addr = remote_addr
+        self.remote_port = remote_port
         self.time=time.time()
         self.stream = None
         self.buffer = []
@@ -423,31 +433,43 @@ class Request(object):
 
             if config.LOCAL_NETWORK:
                 if self.protocol.remote_addr.startswith(config.LOCAL_NETWORK):
-                    self.response = PassResponse(self)
+                    self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
                     self.response.write(e.data)
-                    logging.info('%s connecting by direct %s:%s %s', self.protocol, self.protocol.remote_addr,
-                                 self.protocol.remote_port, len(self._requests))
+                    logging.info('%s connecting by direct %s:%s -> %s:%s %s', self.protocol,
+                                 self.conn.address[0], self.conn.address[1],
+                                 self.response.remote_addr, self.response.remote_port,
+                                 len(self._requests))
                     return
                 
             if isinstance(self.protocol, SSProtocol) and self.protocol.remote_port == 53:
                 self.response =  DnsResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port, False)
                 self.response.write(e.data)
-                logging.info('%s connecting by dns %s:%s %s', self.protocol, self.protocol.remote_addr,
-                             self.protocol.remote_port, len(self._requests))
+                logging.info('%s connecting by dns %s:%s -> %s:%s %s', self.protocol,
+                             self.conn.address[0], self.conn.address[1],
+                             self.response.remote_addr, self.response.remote_port,
+                             len(self._requests))
                 return
 
             if config.USE_RULE:
                 rule = Rule(self.protocol.remote_addr)
                 if  not rule.check():
-                    self.response = PassResponse(self)
+                    self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
                     self.response.write(e.data)
-                    logging.info('%s connecting by direct %s:%s %s',self.protocol, self.protocol.remote_addr,
-                                 self.protocol.remote_port,len(self._requests))
+                    logging.info('%s connecting by direct %s:%s -> %s:%s %s',self.protocol,
+                                 self.conn.address[0], self.conn.address[1],
+                                 self.response.remote_addr, self.response.remote_port,
+                                 len(self._requests))
                     return
 
-            self.response=Response(self)
-            self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),e.data]))
-            logging.info('%s connecting by proxy %s:%s %s',self.protocol, self.protocol.remote_addr,self.protocol.remote_port,len(self._requests))
+            self.response=Response(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
+            self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),
+                                         self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),
+                                         e.data]))
+
+            logging.info('%s connecting by proxy %s:%s -> %s:%s %s',self.protocol,
+                         self.conn.address[0], self.conn.address[1],
+                         self.response.remote_addr,self.response.remote_port,
+                         len(self._requests))
         except:
             logging.error(traceback.format_exc())
             self.end()
@@ -479,8 +501,10 @@ class Request(object):
         if self.response:
             self.response.end()
         self._requests.remove(self)
-        logging.info('%s connected %s:%s %s %.3fs %s/%s', self.protocol, self.protocol.remote_addr if self.protocol else '',
-                     self.protocol.remote_port if self.protocol else '',
+        logging.info('%s connected %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol,
+                     self.conn.address[0], self.conn.address[1],
+                     self.response.remote_addr if self.response else (self.protocol.remote_addr if self.protocol else ''),
+                     self.response.remote_port if self.response else (self.protocol.remote_port if self.protocol else ''),
                      len(self._requests),time.time()-self.time,
                      format_data_count(self.response.get_send_data_len() if self.response else 0),
                      format_data_count(self.response.get_recv_data_len() if self.response else 0))
