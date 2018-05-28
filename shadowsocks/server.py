@@ -27,6 +27,7 @@ os.chdir(os.path.dirname(__file__) or '.')
 import time
 import struct
 import logging
+import socket
 import sevent
 from xstream.server import Server
 from utils import *
@@ -128,6 +129,14 @@ class Response(object):
         self.is_connected=False
         self.buffer= None
         self.time=time.time()
+
+        try:
+            self.conn.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except:pass
+
+        try:
+            self.conn.socket.setsockopt(socket.SOL_TCP, 23, 5)
+        except:pass
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)

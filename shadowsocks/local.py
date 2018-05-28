@@ -30,6 +30,7 @@ import struct
 import sevent
 import logging
 import traceback
+import socket
 import dnslib
 from utils import *
 from protocol import ProtocolParseEndError
@@ -51,6 +52,16 @@ class PassResponse(object):
         self.time=time.time()
         self.send_data_len = 0
         self.recv_data_len = 0
+
+        try:
+            self.conn.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except:
+            pass
+
+        try:
+            self.conn.socket.setsockopt(socket.SOL_TCP, 23, 5)
+        except:
+            pass
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
@@ -195,6 +206,16 @@ class DnsResponse(object):
                             self.conn.write(("114.114.114.114", 53), data)
                         else:
                             self.conn = sevent.tcp.Socket()
+                            try:
+                                self.conn.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                            except:
+                                pass
+
+                            try:
+                                self.conn.socket.setsockopt(socket.SOL_TCP, 23, 5)
+                            except:
+                                pass
+
                             def on_connect(s):
                                 self.conn.write(data)
 
@@ -510,6 +531,16 @@ if __name__ == '__main__':
         client=Client(config.SERVER, config.REMOTE_PORT, 3, config.KEY, config.METHOD.replace("-", "_"))
         server = sevent.tcp.Server()
         ss_server = sevent.tcp.Server()
+
+        try:
+            ss_server._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except:
+            pass
+
+        try:
+            ss_server._socket.setsockopt(socket.SOL_TCP, 23, 5)
+        except:
+            pass
 
         udp_server = sevent.udp.Server()
         ss_udp_server = sevent.udp.Server()
