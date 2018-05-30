@@ -497,8 +497,10 @@ class Request(object):
         self.response = None
 
     def write(self,data):
-        if self.response:
+        try:
             self.conn.write(data)
+        except:
+            pass
 
     def end(self):
         self.conn.end()
