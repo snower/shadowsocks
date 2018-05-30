@@ -497,7 +497,8 @@ class Request(object):
         self.response = None
 
     def write(self,data):
-        self.conn.write(data)
+        if self.response:
+            self.conn.write(data)
 
     def end(self):
         self.conn.end()
