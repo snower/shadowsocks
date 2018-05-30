@@ -129,14 +129,7 @@ class Response(object):
         self.is_connected=False
         self.buffer= None
         self.time=time.time()
-
-        try:
-            self.conn.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        except:pass
-
-        try:
-            self.conn.socket.setsockopt(socket.SOL_TCP, 23, 5)
-        except:pass
+        self.conn.enable_fast_open()
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)

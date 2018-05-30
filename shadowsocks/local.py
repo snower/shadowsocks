@@ -55,17 +55,7 @@ class PassResponse(object):
         self.time=time.time()
         self.send_data_len = 0
         self.recv_data_len = 0
-
-        try:
-            self.conn.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        except:
-            pass
-
-        try:
-            self.conn.socket.setsockopt(socket.SOL_TCP, 23, 5)
-        except:
-            pass
-
+        self.conn.enable_fast_open()
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
         self.conn.on('close', self.on_close)
@@ -211,15 +201,7 @@ class DnsResponse(object):
                             self.remote_addr = "114.114.114.114"
                         else:
                             self.conn = sevent.tcp.Socket()
-                            try:
-                                self.conn.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                            except:
-                                pass
-
-                            try:
-                                self.conn.socket.setsockopt(socket.SOL_TCP, 23, 5)
-                            except:
-                                pass
+                            self.conn.enable_fast_open()
 
                             def on_connect(s):
                                 self.conn.write(data)
@@ -556,15 +538,10 @@ if __name__ == '__main__':
         server = sevent.tcp.Server()
         ss_server = sevent.tcp.Server()
 
-        try:
-            ss_server._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        except:
-            pass
-
-        try:
-            ss_server._socket.setsockopt(socket.SOL_TCP, 23, 5)
-        except:
-            pass
+        server.enable_reuseaddr()
+        server.enable_fast_open()
+        ss_server.enable_reuseaddr()
+        ss_server.enable_fast_open()
 
         udp_server = sevent.udp.Server()
         ss_udp_server = sevent.udp.Server()
