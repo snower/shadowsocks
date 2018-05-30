@@ -82,7 +82,6 @@ class ProxyResponse(object):
 
         if config.PROXY_ADDR:
             self.proxy_connection = sevent.tcp.Socket()
-            self.proxy_connection.enable_fast_open()
             self.proxy_connection.on('connect', self.on_connect)
             self.proxy_connection.on('data', self.on_data)
             self.proxy_connection.on('close', self.on_close)
@@ -130,7 +129,9 @@ class Response(object):
         self.is_connected=False
         self.buffer= None
         self.time=time.time()
-        self.conn.enable_fast_open()
+
+        if self.request.remote_port == 53:
+            self.conn.enable_fast_open()
 
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
