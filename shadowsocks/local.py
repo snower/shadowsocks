@@ -46,6 +46,7 @@ import config
 class PassResponse(object):
     def __init__(self, request, protocol, remote_addr, remote_port):
         self.conn = sevent.tcp.Socket()
+        self.conn.enable_fast_open()
         self.request = request
         self.protocol = protocol
         self.remote_addr = remote_addr
@@ -80,7 +81,7 @@ class PassResponse(object):
     def write(self,data):
         self.send_data_len += len(data)
         if not data:return
-        if self.is_connected:
+        if self.is_connected or self.conn.is_enable_fast_open:
             self.conn.write(data)
         else:
             self.buffer.append(data)
@@ -204,7 +205,8 @@ class DnsResponse(object):
                             self.conn.enable_fast_open()
 
                             def on_connect(s):
-                                self.conn.write(data)
+                                if not self.conn.is_enable_fast_open:
+                                    self.conn.write(data)
 
                             def on_close(s):
                                 self.request.end()
@@ -214,6 +216,8 @@ class DnsResponse(object):
                             self.conn.on("data", self.on_tcp_data)
                             self.conn.connect(("114.114.114.114", 53))
                             self.remote_addr = "114.114.114.114"
+                            if self.conn.is_enable_fast_open:
+                                self.conn.write(data)
 
                     logging.info("direct nsloop %s", host)
                     return

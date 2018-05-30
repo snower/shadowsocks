@@ -82,6 +82,7 @@ class ProxyResponse(object):
 
         if config.PROXY_ADDR:
             self.proxy_connection = sevent.tcp.Socket()
+            self.proxy_connection.enable_fast_open()
             self.proxy_connection.on('connect', self.on_connect)
             self.proxy_connection.on('data', self.on_data)
             self.proxy_connection.on('close', self.on_close)
@@ -113,7 +114,7 @@ class ProxyResponse(object):
             self.connection.close()
             return
 
-        if self.is_connected:
+        if self.is_connected or self.proxy_connection.is_enable_fast_open:
             self.proxy_connection.write(data)
         else:
             self.buffer.append(str(data))
@@ -154,7 +155,7 @@ class Response(object):
     def write(self,data):
         if not data:
             return
-        if self.is_connected:
+        if self.is_connected or self.conn.is_enable_fast_open:
             self.conn.write(data)
         else:
             self.buffer = data
