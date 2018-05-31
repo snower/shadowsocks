@@ -57,6 +57,7 @@ class PassResponse(object):
         self.send_data_len = 0
         self.recv_data_len = 0
         self.conn.enable_fast_open()
+        self.conn.enable_nodelay()
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
         self.conn.on('close', self.on_close)
@@ -203,6 +204,7 @@ class DnsResponse(object):
                         else:
                             self.conn = sevent.tcp.Socket()
                             self.conn.enable_fast_open()
+                            self.conn.enable_nodelay()
 
                             def on_connect(s):
                                 if not self.conn.is_enable_fast_open:
@@ -550,8 +552,10 @@ if __name__ == '__main__':
 
         server.enable_reuseaddr()
         server.enable_fast_open()
+        server.enable_nodelay()
         ss_server.enable_reuseaddr()
         ss_server.enable_fast_open()
+        ss_server.enable_nodelay()
 
         udp_server = sevent.udp.Server()
         ss_udp_server = sevent.udp.Server()
