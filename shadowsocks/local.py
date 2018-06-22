@@ -582,7 +582,7 @@ class SSRequest(Request):
             self.response.write(data)
 
     def write(self,data):
-        data = self.protocol._crypto.encrypt(data.read(-1) if isinstance(buffer, sevent.Buffer) else data)
+        data = self.protocol._crypto.encrypt(data.read(-1) if isinstance(data, sevent.Buffer) else data)
         try:
             self.conn.write(data)
         except:
