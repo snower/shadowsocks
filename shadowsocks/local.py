@@ -102,12 +102,16 @@ class DnsResponse(object):
         self.address = address
         self.remote_addr = remote_addr
         self.remote_port = remote_port
+        self.proxy_remote_addr = remote_addr
+        self.direct_remote_addr = config.EDNS_CLIENT_SUBNETS[remote_addr]
         self.time = time.time()
         self.data_time = time.time()
         self.buffer = []
         self.stream = None
         self.conn = None
         self.is_udp = is_udp
+        self.use_udp = False
+        self.tcp_rdata = ''
         self.send_data_len = 0
         self.recv_data_len = 0
 
@@ -117,7 +121,7 @@ class DnsResponse(object):
         if self.stream:
             return
 
-        if self.is_udp:
+        if self.is_udp or self.use_udp:
             self.stream = session.stream(priority=1, capped=True)
         else:
             self.stream = session.stream()
@@ -147,14 +151,11 @@ class DnsResponse(object):
         self.data_time = time.time()
         data = buffer.next()
         while data:
-            self.request.write(self.address, address, data)
+            if self.is_udp:
+                self.request.write(self.address, address, data)
+            else:
+                self.request.write(struct.pack("!H", len(data)) + data)
             data = buffer.next()
-
-    def on_tcp_data(self, s, buffer):
-        self.recv_data_len += len(buffer)
-        self.data_time = time.time()
-        if self.request:
-            self.request.write(buffer)
 
     def on_data(self, s, buffer):
         self.recv_data_len += len(buffer)
@@ -166,7 +167,14 @@ class DnsResponse(object):
                 self.request.write(self.address, remote_address, data)
                 data = buffer.next()
         else:
-            self.request.write(buffer)
+            if self.use_udp:
+                data = buffer.next()
+                while data:
+                    remote_address, data = self.parse_addr_info(data)
+                    self.request.write(struct.pack("!H", len(data)) + data)
+                    data = buffer.next()
+            else:
+                self.request.write(buffer)
 
     def on_close(self, s):
         if self.stream:
@@ -180,60 +188,62 @@ class DnsResponse(object):
         self.stream = None
         self.conn = None
 
-    def write(self, data):
-        self.data_time = time.time()
-        if isinstance(data, sevent.Buffer):
-            data = data.read(-1)
-        self.send_data_len += len(data)
-
+    def write_query(self, data):
         host = ''
-        try:
-            dns_record = dnslib.DNSRecord.parse(data if self.is_udp else data[2:])
-            if dns_record.questions:
-                host = str(dns_record.questions[0].qname)
-                if host[-1] == ".":
-                    host = host[:-1]
-                rule = Rule(host)
-                if not rule.check():
-                    if self.conn is None:
-                        if self.is_udp:
-                            self.conn = sevent.udp.Socket()
-                            self.conn.on("data", self.on_udp_data)
-                            self.conn.write(("114.114.114.114", 53), data)
-                            self.remote_addr = "114.114.114.114"
-                        else:
-                            self.conn = sevent.tcp.Socket()
-                            self.conn.enable_fast_open()
-                            self.conn.enable_nodelay()
+        dns_record = dnslib.DNSRecord.parse(data)
+        if dns_record.questions:
+            host = str(dns_record.questions[0].qname)
+            if host[-1] == ".":
+                host = host[:-1]
+            rule = Rule(host)
+            if not rule.check():
+                if self.conn is None:
+                    self.conn = sevent.udp.Socket()
+                    self.conn.on("data", self.on_udp_data)
+                    self.remote_addr = self.direct_remote_addr
+                dns_record = self.handle_edns_client_subnet(dns_record)
+                self.conn.write((self.direct_remote_addr, 53), dns_record.pack())
+                logging.info("direct nsloop %s", host)
+                return True, host
+        return False, host
 
-                            def on_connect(s):
-                                if not self.conn.is_enable_fast_open:
-                                    self.conn.write(data)
-
-                            def on_close(s):
-                                self.request.end()
-
-                            self.conn.on("connect", on_connect)
-                            self.conn.on("close", on_close)
-                            self.conn.on("data", self.on_tcp_data)
-                            self.conn.connect(("114.114.114.114", 53))
-                            self.remote_addr = "114.114.114.114"
-                            if self.conn.is_enable_fast_open:
-                                self.conn.write(data)
-
-                    logging.info("direct nsloop %s", host)
+    def write(self, buffer):
+        self.data_time = time.time()
+        self.send_data_len += len(buffer)
+        while True:
+            if self.is_udp:
+                data = buffer.next()
+                if not data:
                     return
-        except Exception as e:
-            logging.info("parse dns error:%s", e)
+            else:
+                self.tcp_rdata += buffer.read(-1)
+                if len(self.tcp_rdata) < 2:
+                    return
+                data_len, = struct.unpack("!H", self.tcp_rdata[:2])
+                if len(self.tcp_rdata) - 2 < data_len:
+                    return
 
-        if self.stream is None:
-            client.session(self.on_session)
-        data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
-        if self.stream:
-            self.stream.write(data)
-        else:
-            self.buffer.append(data)
-        logging.info("proxy nsloop %s", host)
+                data, self.tcp_rdata = self.tcp_rdata[2: data_len + 2], self.tcp_rdata[data_len + 2:]
+
+            host = ''
+            try:
+                succed, host = self.write_query(data)
+                if succed:
+                    continue
+                self.use_udp = True
+            except Exception as e:
+                logging.info("parse dns error:%s", e)
+
+            if self.stream is None:
+                client.session(self.on_session)
+            if not self.is_udp and not self.use_udp:
+                data = struct.pack("!H", len(data)) + data
+            data = "".join([struct.pack(">H", len(self.proxy_remote_addr)), self.proxy_remote_addr, struct.pack('>H', self.remote_port), data])
+            if self.stream:
+                self.stream.write(data)
+            else:
+                self.buffer.append(data)
+            logging.info("proxy nsloop %s", host)
 
     def end(self):
         if self.stream:
@@ -252,6 +262,41 @@ class DnsResponse(object):
         except Exception, e:
             logging.error("parse addr error: %s %s", e, data)
             return None, ''
+
+    def handle_edns_client_subnet(self, dns_record):
+        client_id = self.address[0]
+        if client_id.startswith(config.LOCAL_NETWORK):
+            return dns_record
+
+        opt_rr = None
+        for rr in dns_record.ar:
+            if rr.rtype == 41:
+                opt_rr = rr
+                break
+
+        if opt_rr is None:
+            try:
+                client_subnet = dnslib.EDNSOption(8, struct.pack("!HH4s", 0x0001, 0x2000, socket.inet_aton(client_id)))
+            except socket.error:
+                client_subnet = dnslib.EDNSOption(8, struct.pack("!HH16s", 0x0002, 0x2000, socket.inet_pton(socket.AF_INET6, client_id)))
+            opt_rr = dnslib.RR(dnslib.DNSLabel(None), 41, 4096, 0, [client_subnet])
+            dns_record.add_ar(opt_rr)
+            logging.info("dns edns_client_subnet %s", client_id)
+        else:
+            client_subnet = None
+            for ednsoption in opt_rr.rdata:
+                if ednsoption.code == 8:
+                    client_subnet = ednsoption
+                    break
+
+            if not client_subnet:
+                try:
+                    client_subnet = dnslib.EDNSOption(8, struct.pack("!HH4s", 0x0001, 0x2000, socket.inet_aton(client_id)))
+                except socket.error:
+                    client_subnet = dnslib.EDNSOption(8, struct.pack("!HH16s", 0x0002, 0x2000, socket.inet_pton(socket.AF_INET6, client_id)))
+                opt_rr.rdata.append(client_subnet)
+                logging.info("dns edns_client_subnet %s", client_id)
+        return dns_record
 
     def get_send_data_len(self):
         return self.send_data_len
@@ -332,7 +377,7 @@ class UdpRequest(object):
         while data:
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
-                if remote_port == 53:
+                if remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
                     response = self.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
                 else:
                     response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
@@ -429,8 +474,8 @@ class Request(object):
                                  len(self._requests))
                     return
                 
-            if isinstance(self.protocol, SSProtocol) and self.protocol.remote_port == 53:
-                self.response =  DnsResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port, False)
+            if self.protocol.remote_port == 53 and self.protocol.remote_addr in config.EDNS_CLIENT_SUBNETS:
+                self.response =  DnsResponse(self, self.conn.address, self.protocol.remote_addr, self.protocol.remote_port, False)
                 self.response.write(e.data)
                 logging.info('%s connecting by dns %s:%s -> %s:%s %s', self.protocol,
                              self.conn.address[0], self.conn.address[1],

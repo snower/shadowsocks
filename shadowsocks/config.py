@@ -30,7 +30,9 @@ PROXY_ADDR = config.get("proxy_addr")
 PROXY_PORT = config.get("proxy_port", 443)
 SSKEY = config.get("sspassword", KEY)
 SSMETHOD = config.get("ssmethod", METHOD)
-
+EDNS_CLIENT_SUBNETS = config.get("edns_client_subnets", {
+    "8.8.8.8": "119.29.29.29"
+})
 for key, value in optlist:
     if key == '-p':
         REMOTE_PORT = int(value)
