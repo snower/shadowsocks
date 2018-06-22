@@ -210,13 +210,15 @@ class DnsResponse(object):
     def write(self, buffer):
         self.data_time = time.time()
         self.send_data_len += len(buffer)
+        if self.is_udp:
+            self.tcp_rdata += buffer.read(-1) if isinstance(data, sevent.Buffer) else buffer
+                
         while True:
             if self.is_udp:
                 data = buffer.next()
                 if not data:
                     return
             else:
-                self.tcp_rdata += buffer.read(-1)
                 if len(self.tcp_rdata) < 2:
                     return
                 data_len, = struct.unpack("!H", self.tcp_rdata[:2])
