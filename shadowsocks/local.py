@@ -211,7 +211,7 @@ class DnsResponse(object):
         self.data_time = time.time()
         self.send_data_len += len(buffer)
         if self.is_udp:
-            self.tcp_rdata += buffer.read(-1) if isinstance(data, sevent.Buffer) else buffer
+            self.tcp_rdata += buffer.read(-1) if isinstance(buffer, sevent.Buffer) else buffer
                 
         while True:
             if self.is_udp:
