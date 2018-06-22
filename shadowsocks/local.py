@@ -210,7 +210,7 @@ class DnsResponse(object):
     def write(self, buffer):
         self.data_time = time.time()
         self.send_data_len += len(buffer)
-        if self.is_udp:
+        if not self.is_udp:
             self.tcp_rdata += buffer.read(-1) if isinstance(buffer, sevent.Buffer) else buffer
                 
         while True:
@@ -582,7 +582,7 @@ class SSRequest(Request):
             self.response.write(data)
 
     def write(self,data):
-        data = self.protocol._crypto.encrypt(data.read(-1))
+        data = self.protocol._crypto.encrypt(data.read(-1) if isinstance(buffer, sevent.Buffer) else data)
         try:
             self.conn.write(data)
         except:
