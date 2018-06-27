@@ -215,7 +215,12 @@ class DnsResponse(object):
                 
         while True:
             if self.is_udp:
-                data = buffer.next()
+                if isinstance(buffer, sevent.Buffer):
+                    data = buffer.next()
+                else:
+                    if not buffer:
+                        return
+                    data, buffer = buffer, None
                 if not data:
                     return
             else:
