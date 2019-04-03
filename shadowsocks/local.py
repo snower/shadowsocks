@@ -115,7 +115,7 @@ class DnsResponse(object):
         self.send_data_len = 0
         self.recv_data_len = 0
 
-        loop.timeout(15, self.on_timeout)
+        loop.add_timeout(15, self.on_timeout)
 
     def on_session(self, client, session):
         if self.stream:
@@ -144,7 +144,7 @@ class DnsResponse(object):
             self.stream = None
             self.conn = None
         else:
-            loop.timeout(15, self.on_timeout)
+            loop.add_timeout(15, self.on_timeout)
 
     def on_udp_data(self, s, address, buffer):
         self.recv_data_len += len(buffer)
