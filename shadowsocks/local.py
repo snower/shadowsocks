@@ -96,6 +96,56 @@ class PassResponse(object):
     def get_recv_data_len(self):
         return self.recv_data_len
 
+class UdpPassResponse(object):
+    def __init__(self, request, address, remote_addr, remote_port):
+        self.request = request
+        self.address = address
+        self.remote_addr = remote_addr
+        self.remote_port = remote_port
+        self.time = time.time()
+        self.data_time = time.time()
+        self.conn = None
+        self.send_data_len = 0
+        self.recv_data_len = 0
+
+        loop.timeout(30, self.on_timeout)
+
+    def on_timeout(self):
+        if self.data_time >= 300:
+            if self.conn:
+                self.conn.close()
+            self.request.end(self.address)
+            self.conn = None
+        else:
+            loop.timeout(30, self.on_timeout)
+
+    def on_data(self, s, buffer):
+        data = buffer.next()
+        while data:
+            self.request.write(self.address, (self.remote_addr, self.remote_port), data)
+            self.recv_data_len += len(data)
+            data = buffer.next()
+        self.data_time = time.time()
+
+    def write(self, data):
+        if self.conn:
+            self.conn = sevent.udp.Socket()
+            self.conn.on("data", self.on_data)
+
+        self.conn.write((self.remote_addr, self.remote_port), data)
+        self.send_data_len += len(data)
+        self.data_time = time.time()
+
+    def end(self):
+        self.conn.close()
+        self.conn = None
+
+    def get_send_data_len(self):
+        return self.send_data_len
+
+    def get_recv_data_len(self):
+        return self.recv_data_len
+
 class DnsResponse(object):
     def __init__(self, request, address, remote_addr, remote_port, is_udp = True):
         self.request = request
@@ -377,11 +427,23 @@ class UdpRequest(object):
         while data:
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
-                if remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
+                if config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK):
+                    response = self.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by direct %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                elif remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
                     response = self.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by dns %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                elif config.USE_RULE:
+                    rule = Rule(self.protocol.remote_addr)
+                    if not rule.check():
+                        response = self.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
+                        logging.info('%s udp connecting by direct %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                    else:
+                        response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
+                        logging.info('%s udp connecting by proxy %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
                 else:
                     response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
-                logging.info('%s udp connecting %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                    logging.info('%s udp connecting by proxy %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
             else:
                 response = self.caches[address]
             response.write(data)
@@ -394,8 +456,14 @@ class UdpRequest(object):
 
     def end(self, address):
         try:
+            response = self.caches[address]
             del self.caches[address]
-            logging.info('%s udp connected %s', self.protocol, address)
+            logging.info('%s udp connected %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol,
+                         address[0], address[1],
+                         response.remote_addr, response.remote_port,
+                         len(self.caches), time.time() - response.time,
+                         format_data_count(response.get_send_data_len()),
+                         format_data_count(response.get_recv_data_len()))
         except:
             pass
 
