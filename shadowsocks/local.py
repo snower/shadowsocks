@@ -108,7 +108,7 @@ class UdpPassResponse(object):
         self.send_data_len = 0
         self.recv_data_len = 0
 
-        loop.timeout(30, self.on_timeout)
+        loop.add_timeout(30, self.on_timeout)
 
     def on_timeout(self):
         if self.data_time >= 300:
@@ -117,7 +117,7 @@ class UdpPassResponse(object):
             self.request.end(self.address)
             self.conn = None
         else:
-            loop.timeout(30, self.on_timeout)
+            loop.add_timeout(30, self.on_timeout)
 
     def on_data(self, s, buffer):
         data = buffer.next()
