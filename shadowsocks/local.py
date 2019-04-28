@@ -128,7 +128,7 @@ class UdpPassResponse(object):
         self.data_time = time.time()
 
     def write(self, data):
-        if self.conn:
+        if not self.conn:
             self.conn = sevent.udp.Socket()
             self.conn.on("data", self.on_data)
 
