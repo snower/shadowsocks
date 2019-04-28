@@ -165,7 +165,7 @@ class DnsResponse(object):
         self.send_data_len = 0
         self.recv_data_len = 0
 
-        loop.timeout(15, self.on_timeout)
+        loop.add_timeout(15, self.on_timeout)
 
     def on_session(self, client, session):
         if self.stream:
@@ -194,7 +194,7 @@ class DnsResponse(object):
             self.stream = None
             self.conn = None
         else:
-            loop.timeout(15, self.on_timeout)
+            loop.add_timeout(15, self.on_timeout)
 
     def on_udp_data(self, s, address, buffer):
         self.recv_data_len += len(buffer)
@@ -260,13 +260,20 @@ class DnsResponse(object):
     def write(self, buffer):
         self.data_time = time.time()
         self.send_data_len += len(buffer)
+        if not self.is_udp:
+            self.tcp_rdata += buffer.read(-1) if isinstance(buffer, sevent.Buffer) else buffer
+                
         while True:
             if self.is_udp:
-                data = buffer.next()
+                if isinstance(buffer, sevent.Buffer):
+                    data = buffer.next()
+                else:
+                    if not buffer:
+                        return
+                    data, buffer = buffer, None
                 if not data:
                     return
             else:
-                self.tcp_rdata += buffer.read(-1)
                 if len(self.tcp_rdata) < 2:
                     return
                 data_len, = struct.unpack("!H", self.tcp_rdata[:2])
@@ -648,7 +655,7 @@ class SSRequest(Request):
             self.response.write(data)
 
     def write(self,data):
-        data = self.protocol._crypto.encrypt(data.read(-1))
+        data = self.protocol._crypto.encrypt(data.read(-1) if isinstance(data, sevent.Buffer) else data)
         try:
             self.conn.write(data)
         except:

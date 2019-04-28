@@ -24,7 +24,7 @@ class Sock5Protocol(Protocol):
         elif self.stage == 1:
             inet_ut = self.handle_cmd(data)
             self.parse_addr_info(data)
-            self.request.write('\x05\x00\x00\x01%s%s' % (socket.inet_aton(self.local_addr), struct.pack(">H", self.local_port)))
+            self.request.write("".join(['\x05\x00\x00\x01', socket.inet_aton(self.local_addr), struct.pack(">H", self.local_port)]))
             raise ProtocolParseEndError(data[self.header_length:], inet_ut)
 
     def hello(self,data):
@@ -84,5 +84,4 @@ class Sock5Protocol(Protocol):
         return remote_addr, remote_port, data[header_length:]
 
     def pack_udp(self, remote_addr, remote_port, data):
-        header = '\x00\x00\x00'
-        return "".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
+        return "".join(['\x00\x00\x00', struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
