@@ -119,12 +119,9 @@ class UdpPassResponse(object):
         else:
             loop.add_timeout(30, self.on_timeout)
 
-    def on_data(self, s, address, buffer):
-        data = buffer.next()
-        while data:
-            self.request.write(self.address, address, data)
-            self.recv_data_len += len(data)
-            data = buffer.next()
+    def on_data(self, s, address, data):
+        self.recv_data_len += len(data)
+        self.request.write(self.address, address, data)
         self.data_time = time.time()
 
     def write(self, data):
