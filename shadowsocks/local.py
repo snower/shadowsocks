@@ -124,6 +124,7 @@ class UdpPassResponse(object):
         while data:
             self.request.write(self.address, address, data)
             self.recv_data_len += len(data)
+            data = buffer.next()
         self.data_time = time.time()
 
     def write(self, data):
