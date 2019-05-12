@@ -52,19 +52,18 @@ class UdpResponse(object):
             logging.error("parse addr error: %s %s", e, data)
             return  None, ''
 
-    def on_data(self, s, address, buffer):
-        data = buffer.next()
-        while data:
+    def on_data(self, s, buffer):
+        while buffer:
+            data, address = buffer.next()
             data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", address[1]), data])
             self.request.write(data)
-            data = buffer.next()
 
     def write(self, buffer):
         data = buffer.next()
         while data:
             address, data = self.parse_addr_info(data)
             if address:
-                self.conn.write(address, data)
+                self.conn.write((data, address))
             data = buffer.next()
 
     def end(self):

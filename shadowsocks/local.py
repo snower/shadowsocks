@@ -146,16 +146,15 @@ class DnsResponse(object):
         else:
             loop.add_timeout(15, self.on_timeout)
 
-    def on_udp_data(self, s, address, buffer):
+    def on_udp_data(self, s, buffer):
         self.recv_data_len += len(buffer)
         self.data_time = time.time()
-        data = buffer.next()
-        while data:
+        while buffer:
+            data, address = buffer.next()
             if self.is_udp:
                 self.request.write(self.address, address, data)
             else:
                 self.request.write(struct.pack("!H", len(data)) + data)
-            data = buffer.next()
 
     def on_data(self, s, buffer):
         self.recv_data_len += len(buffer)
@@ -202,7 +201,7 @@ class DnsResponse(object):
                     self.conn.on("data", self.on_udp_data)
                     self.remote_addr = self.direct_remote_addr
                 dns_record = self.handle_edns_client_subnet(dns_record)
-                self.conn.write((self.direct_remote_addr, 53), dns_record.pack())
+                self.conn.write((dns_record.pack(), (self.direct_remote_addr, 53)))
                 logging.info("direct nsloop %s", host)
                 return True, host
         return False, host
@@ -379,9 +378,9 @@ class UdpRequest(object):
         self.server = server
         self.server.on("data", self.on_data)
 
-    def on_data(self, s, address, buffer):
-        data = buffer.next()
-        while data:
+    def on_data(self, s, buffer):
+        while buffer:
+            address, data = buffer.next()
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
                 if remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
@@ -392,12 +391,11 @@ class UdpRequest(object):
             else:
                 response = self.caches[address]
             response.write(data)
-            data = buffer.next()
 
     def write(self, address, remote_address, data):
         if address:
             data = self.protocol.pack_udp(remote_address[0], remote_address[1], data)
-            self.server.write(address, data)
+            self.server.write((data, address))
 
     def end(self, address):
         try:
