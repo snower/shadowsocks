@@ -429,7 +429,7 @@ class UdpRequest(object):
 
     def on_data(self, s, buffer):
         while buffer:
-            address, data = buffer.next()
+            data, address = buffer.next()
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
                 if config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK):
