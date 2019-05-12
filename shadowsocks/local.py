@@ -250,7 +250,7 @@ class DnsResponse(object):
                     self.conn.on("data", self.on_udp_data)
                     self.remote_addr = self.direct_remote_addr
                 dns_record = self.handle_edns_client_subnet(dns_record)
-                self.conn.write((dns_record.pack(), (self.direct_remote_addr, 53)))
+                self.conn.write((bytes(dns_record.pack()), (self.direct_remote_addr, 53)))
                 logging.info("direct nsloop %s", host)
                 return True, host
         return False, host
