@@ -119,12 +119,11 @@ class UdpPassResponse(object):
         else:
             loop.add_timeout(30, self.on_timeout)
 
-    def on_data(self, s, address, buffer):
-        data = buffer.next()
-        while data:
+    def on_data(self, s, buffer):
+        while buffer:
+            data, address = buffer.next()
             self.request.write(self.address, address, data)
             self.recv_data_len += len(data)
-            data = buffer.next()
         self.data_time = time.time()
 
     def write(self, data):
@@ -132,7 +131,7 @@ class UdpPassResponse(object):
             self.conn = sevent.udp.Socket()
             self.conn.on("data", self.on_data)
 
-        self.conn.write((self.remote_addr, self.remote_port), data)
+        self.conn.write((data, (self.remote_addr, self.remote_port)))
         self.send_data_len += len(data)
         self.data_time = time.time()
 
