@@ -438,6 +438,9 @@ class UdpRequest(object):
                 elif remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
                     response = self.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
                     logging.info('%s udp connecting by dns %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                elif remote_port < 128:
+                    response = self.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by direct %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
                 elif config.USE_RULE:
                     rule = Rule(self.protocol.remote_addr)
                     if not rule.check():
