@@ -27,7 +27,6 @@ os.chdir(os.path.dirname(__file__) or '.')
 import time
 import struct
 import logging
-import socket
 import sevent
 from xstream.server import Server
 from utils import *
@@ -122,12 +121,65 @@ class ProxyResponse(object):
     def end(self):
         self.proxy_connection.end()
 
+class FileBuffer(object):
+    cache_path = None
+
+    def __init__(self):
+        self.filename = None
+        self.rlen = 0
+        self.wlen = 0
+        self.fp = None
+
+    def open(self):
+        cache_path = self.init_dir()
+        self.filename = cache_path + os.path.sep + struct.pack("!Q", int(id(self))).encode("hex")
+        self.fp = open(self.filename, 'wb+')
+
+    def init_dir(self):
+        if self.cache_path:
+            return self.cache_path
+
+        cache_path = os.environ.get("CACHE_PATH")
+        if cache_path:
+            self.__class__.cache_path = os.path.abspath(cache_path)
+        else:
+            self.__class__.cache_path = os.path.abspath("./cache")
+        if not os.path.exists(self.__class__.cache_path):
+            os.mkdir(self.__class__.cache_path)
+        return self.__class__.cache_path
+
+    def write(self, data):
+        self.fp.seek(0, os.SEEK_END)
+        self.fp.write(data)
+        self.wlen += len(data)
+
+    def read(self, size = -1):
+        if self.rlen >= self.wlen:
+            return ''
+
+        self.fp.seek(self.rlen, os.SEEK_SET)
+        if size < 0:
+            size = self.wlen - self.rlen
+        self.rlen += size
+        return self.fp.read(size)
+
+    def close(self):
+        self.fp.close()
+        try:
+            os.remove(self.filename)
+        except:
+            logging.info("remove filename error: %s", self.filename)
+
 class Response(object):
     def __init__(self, request):
         self.conn = sevent.tcp.Socket()
         self.request = request
         self.is_connected=False
-        self.buffer= None
+        self.is_ended = False
+        self.wbuffer = None
+        self.rbuffer = None
+        self.pbuffer = None
+        self.file_buffer = None
         self.time=time.time()
 
         if self.request.remote_port == 53:
@@ -142,17 +194,96 @@ class Response(object):
 
     def on_connect(self, s):
         self.is_connected=True
-        if self.buffer:
-            self.write(self.buffer)
+        if self.wbuffer:
+            self.write(self.wbuffer)
+        self.pbuffer = s._rbuffers
+        self.pbuffer.remove_all_listeners()
+        self.pbuffer.on("drain", self.on_drain)
+        self.pbuffer.on("regain", self.on_regain)
+
+    def on_drain(self, buffer):
+        if self.file_buffer is False:
+            return
+
+        if self.file_buffer:
+            if len(buffer) < 0:
+                return
+            sevent.current().add_async(lambda : self.file_buffer.write(buffer.read()))
+            return
+
+        self.file_buffer = FileBuffer()
+        try:
+            self.file_buffer.open()
+        except Exception as e:
+            logging.error("open filebuffer error: %s", e)
+            self.file_buffer = False
+            return
+
+        self.rbuffer = sevent.Buffer(2 * 1024 * 1024)
+        while buffer:
+            self.rbuffer.write(buffer.next())
+        self.rbuffer.on("drain", self.on_rbuffer_drain)
+        self.rbuffer.on("regain", self.on_rbuffer_regain)
+        self.request.stream._send_buffer = self.rbuffer
+        buffer._drain_size = 1024 * 1024
+        buffer._regain_size = 1
+        sevent.current().add_async(lambda : self.request.write(self.rbuffer))
+
+    def on_regain(self, buffer):
+        pass
+
+    def on_rbuffer_drain(self, buffer):
+        pass
+
+    def on_rbuffer_regain(self, buffer):
+        def do_write(self, buffer):
+            buffer_len = self.file_buffer.wlen - self.file_buffer.rlen
+            if buffer_len > 0:
+                wlen = buffer._drain_size - len(buffer) + 1
+                if wlen > buffer_len:
+                    wlen = buffer_len
+                buffer.write(self.file_buffer.read(wlen))
+                self.request.write(buffer)
+
+            if self.file_buffer.wlen <= self.file_buffer.rlen:
+                if self.pbuffer:
+                    buffer.write(self.pbuffer.read())
+
+                if self.is_ended:
+                    def do_close(self):
+                        self.file_buffer.close()
+                        self.file_buffer = None
+                        self.request.end()
+                    sevent.current().add_async(do_close, self)
+
+        sevent.current().add_async(do_write, self, buffer)
 
     def on_data(self, s, data):
-        self.request.write(data)
+        if not self.file_buffer:
+            return self.request.write(data)
 
-    def on_close(self, s):
-        self.request.end()
+        if self.file_buffer.wlen <= self.file_buffer.rlen and len(self.rbuffer) < self.rbuffer._regain_size:
+            while data:
+                self.rbuffer.write(data.next())
+            return self.request.write(data)
 
     def on_end(self, s):
         pass
+
+    def on_close(self, s):
+        if not self.file_buffer:
+            return self.request.end()
+
+        def do_write(self):
+            if self.pbuffer:
+                self.file_buffer.write(self.pbuffer.read())
+            self.is_ended = True
+            if self.file_buffer.wlen <= self.file_buffer.rlen:
+                self.file_buffer.close()
+                self.file_buffer = None
+                return self.request.end()
+            self.on_rbuffer_drain(self.rbuffer)
+        sevent.current().add_async(do_write, self)
 
     def write(self,data):
         if not data:
@@ -160,10 +291,13 @@ class Response(object):
         if self.is_connected or self.conn.is_enable_fast_open:
             self.conn.write(data)
         else:
-            self.buffer = data
+            self.wbuffer = data
 
     def end(self):
         self.conn.end()
+        if self.file_buffer:
+            self.file_buffer.close()
+            self.file_buffer = None
 
 class Request(object):
     _requests=[]
