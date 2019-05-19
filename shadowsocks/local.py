@@ -648,8 +648,7 @@ class SSRequest(Request):
     def on_data(self, s, data):
         if self.protocol_parse_end:
             while data:
-                data = self.protocol._crypto.decrypt(data.next())
-                self.response.write(data)
+                self.response.write(self.protocol._crypto.decrypt(data.next()))
             return
 
         if self.protocol is None:
