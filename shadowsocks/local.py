@@ -81,7 +81,6 @@ class PassResponse(object):
 
     def write(self,data):
         self.send_data_len += len(data)
-        if not data:return
         if self.is_connected or self.conn.is_enable_fast_open:
             self.conn.write(data)
         else:
@@ -583,6 +582,9 @@ class Request(object):
             self.end()
 
     def on_data(self, s, data):
+        if self.protocol_parse_end:
+            return self.response.write(data)
+
         if self.protocol is None:
             data = data.read(-1)
             if data[0] == '\x05':
@@ -597,10 +599,8 @@ class Request(object):
                 else:
                     self.protocol = RedirectProtocol(self)
             self.parse(data)
-        elif not self.protocol_parse_end:
-            self.parse(data.read(-1))
         else:
-            self.response.write(data)
+            self.parse(data.read(-1))
 
     def on_end(self, s):
        pass
@@ -619,10 +619,7 @@ class Request(object):
         self.response = None
 
     def write(self,data):
-        try:
-            self.conn.write(data)
-        except:
-            pass
+        self.conn.write(data)
 
     def end(self):
         self.conn.end()
@@ -643,23 +640,32 @@ class Request(object):
         session.on('close', Request.on_session_close)
 
 class SSRequest(Request):
+    def __init__(self, conn):
+        super(SSRequest, self).__init__(conn)
+
+        self.wbuffer = sevent.Buffer()
+
     def on_data(self, s, data):
+        if self.protocol_parse_end:
+            while data:
+                data = self.protocol._crypto.decrypt(data.next())
+                self.response.write(data)
+            return
+
         if self.protocol is None:
             data = data.read(-1)
             self.protocol = SSProtocol(self)
             self.parse(data)
-        elif not self.protocol_parse_end:
-            self.parse(data.read(-1))
         else:
-            data = self.protocol._crypto.decrypt(data.read(-1))
-            self.response.write(data)
+            self.parse(data.read(-1))
 
     def write(self,data):
-        data = self.protocol._crypto.encrypt(data.read(-1) if isinstance(data, sevent.Buffer) else data)
-        try:
-            self.conn.write(data)
-        except:
-            pass
+        if data.__class__ == sevent.Buffer:
+            while data:
+                self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
+        else:
+            self.wbuffer.write(self.protocol._crypto.encrypt(data))
+        self.conn.write(self.wbuffer)
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
