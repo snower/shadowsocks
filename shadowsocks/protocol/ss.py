@@ -47,8 +47,6 @@ class Crypto(object):
         return get_evp(self._alg, key, iv, op)
 
     def encrypt(self, buf):
-        if len(buf) == 0:
-            return buf
         if self.iv_sent:
             return self._encipher.update(buf)
         else:
@@ -56,8 +54,6 @@ class Crypto(object):
             return self._iv + self._encipher.update(buf)
 
     def decrypt(self, buf):
-        if len(buf) == 0:
-            return buf
         if self.decipher is None:
             decipher_iv_len = ALG_KEY_IV_LEN.get(self._alg)[1]
             decipher_iv = buf[:decipher_iv_len]
