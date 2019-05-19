@@ -619,7 +619,8 @@ class Request(object):
         self.response = None
 
     def write(self,data):
-        self.conn.write(data)
+        try:self.conn.write(data)
+        except:pass
 
     def end(self):
         self.conn.end()
@@ -664,7 +665,8 @@ class SSRequest(Request):
                 self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
         else:
             self.wbuffer.write(self.protocol._crypto.encrypt(data))
-        self.conn.write(self.wbuffer)
+        try:self.conn.write(self.wbuffer)
+        except:pass
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
