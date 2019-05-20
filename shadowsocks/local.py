@@ -645,6 +645,17 @@ class SSRequest(Request):
         super(SSRequest, self).__init__(conn)
 
         self.wbuffer = sevent.Buffer()
+        self.wbuffer.on("drain", self.on_drain)
+        self.wbuffer.on("regain", self.on_regain)
+        self.prbuffer = None
+
+    def on_drain(self, buffer):
+        pass
+
+    def on_regain(self, buffer):
+        if self.prbuffer:
+            self.prbuffer.do_regain()
+            self.prbuffer = None
 
     def on_data(self, s, data):
         if self.protocol_parse_end:
@@ -663,6 +674,9 @@ class SSRequest(Request):
         if data.__class__ == sevent.Buffer:
             while data:
                 self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
+            if self.wbuffer._full:
+                self.prbuffer = data
+                data.do_drain()
         else:
             self.wbuffer.write(self.protocol._crypto.encrypt(data))
         try:self.conn.write(self.wbuffer)
