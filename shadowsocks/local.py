@@ -521,10 +521,30 @@ class Request(object):
         self.protocol=None
         self.protocol_parse_end=False
         self.time=time.time()
+        self.data_time=time.time()
+        self.closed=False
 
         conn.on('data', self.on_data)
         conn.on('end', self.on_end)
         conn.on('close', self.on_close)
+
+
+        def on_data_timeout():
+            if self.closed:
+                return
+
+            if time.time() - self.data_time > 15 * 60:
+                return self.end()
+            sevent.current().add_timeout(30, on_data_timeout)
+
+        def on_timeout():
+            if self.closed:
+                return
+
+            if not self.protocol or not self.protocol_parse_end:
+                return self.end()
+            sevent.current().add_timeout(30, on_data_timeout)
+        sevent.current().add_timeout(0.5, on_timeout)
 
     def parse(self,data):
         try:
@@ -582,6 +602,7 @@ class Request(object):
             self.end()
 
     def on_data(self, s, data):
+        self.data_time = time.time()
         if self.protocol_parse_end:
             return self.response.write(data)
 
@@ -606,6 +627,7 @@ class Request(object):
        pass
 
     def on_close(self, s):
+        self.closed = True
         if self.response:
             self.response.end()
         self._requests.remove(self)
@@ -619,6 +641,7 @@ class Request(object):
         self.response = None
 
     def write(self,data):
+        self.data_time = time.time()
         try:self.conn.write(data)
         except:pass
 
