@@ -21,15 +21,12 @@
 # SOFTWARE.
 
 from __future__ import with_statement
-import sys
 import os
 os.chdir(os.path.dirname(__file__) or '.')
-import random
 import time
 import struct
 import sevent
 import logging
-import traceback
 import socket
 import dnslib
 from utils import *
@@ -642,9 +639,10 @@ class Request(object):
         self.protocol = None
 
     def write(self,data):
+        if not self.response:
+            return
         self.data_time = time.time()
-        try:self.conn.write(data)
-        except:pass
+        self.conn.write(data)
 
     def end(self):
         self.conn.end()
@@ -694,7 +692,10 @@ class SSRequest(Request):
         else:
             self.parse(data.read(-1))
 
-    def write(self,data):
+    def write(self, data):
+        if not self.response:
+            return
+
         if data.__class__ == sevent.Buffer:
             while data:
                 self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
@@ -703,8 +704,7 @@ class SSRequest(Request):
                 data.do_drain()
         else:
             self.wbuffer.write(self.protocol._crypto.encrypt(data))
-        try:self.conn.write(self.wbuffer)
-        except:pass
+        self.conn.write(self.wbuffer)
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
