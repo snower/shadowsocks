@@ -601,6 +601,8 @@ class Request(object):
     def on_data(self, s, data):
         self.data_time = time.time()
         if self.protocol_parse_end:
+            if not self.response:
+                return
             return self.response.write(data)
 
         if self.protocol is None:
@@ -639,8 +641,9 @@ class Request(object):
         self.protocol = None
 
     def write(self,data):
-        if not self.response:
-            return
+        if self.protocol_parse_end:
+            if not self.response:
+                return
         self.data_time = time.time()
         self.conn.write(data)
 
@@ -693,8 +696,9 @@ class SSRequest(Request):
             self.parse(data.read(-1))
 
     def write(self, data):
-        if not self.response:
-            return
+        if self.protocol_parse_end:
+            if not self.response:
+                return
 
         if data.__class__ == sevent.Buffer:
             while data:
