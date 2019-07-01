@@ -639,6 +639,7 @@ class Request(object):
                      format_data_count(self.response.get_send_data_len() if self.response else 0),
                      format_data_count(self.response.get_recv_data_len() if self.response else 0))
         self.response = None
+        self.protocol = None
 
     def write(self,data):
         self.data_time = time.time()
