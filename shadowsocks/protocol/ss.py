@@ -13,8 +13,7 @@ ADDRTYPE_IPV6 = 4
 ADDRTYPE_HOST = 3
 
 from xstream.crypto import ALG_KEY_IV_LEN
-from xstream.crypto import rand_string
-from xstream.crypto import get_evp
+from xstream.crypto import rand_string, get_cryptography, get_m2crypto, get_openssl, get_evp
 
 def EVP_BytesToKey(password, key_len, iv_len):
     m = []
@@ -42,9 +41,14 @@ class Crypto(object):
         self._encipher = self.get_cipher(1, self._iv)
         self.decipher = None
 
+        try:
+            self.get_evp = get_cryptography()[0] if "gcm" in alg else get_m2crypto()[0]
+        except:
+            self.get_evp = get_evp
+
     def get_cipher(self, op, iv):
         key, _ = EVP_BytesToKey(self._key, ALG_KEY_IV_LEN.get(self._alg)[0], ALG_KEY_IV_LEN.get(self._alg)[1])
-        return get_evp(self._alg, key, iv, op)
+        return self.get_evp(self._alg, key, iv, op)
 
     def encrypt(self, buf):
         if self.iv_sent:

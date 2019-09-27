@@ -25,6 +25,7 @@ import os
 os.chdir(os.path.dirname(__file__) or '.')
 import time
 import struct
+import traceback
 import sevent
 import logging
 import socket
@@ -739,5 +740,4 @@ if __name__ == '__main__':
         client.open()
         loop.start()
     except:
-        import traceback
         traceback.print_exc()
