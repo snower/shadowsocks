@@ -684,6 +684,7 @@ class SSRequest(Request):
             self.prbuffer = None
 
     def on_data(self, s, data):
+        self.data_time = time.time()
         if self.protocol_parse_end:
             while data:
                 self.response.write(self.protocol._crypto.decrypt(data.next()))
@@ -710,6 +711,7 @@ class SSRequest(Request):
         else:
             self.wbuffer.write(self.protocol._crypto.encrypt(data))
         self.conn.write(self.wbuffer)
+        self.data_time = time.time()
 
 if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
