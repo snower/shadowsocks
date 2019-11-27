@@ -31,20 +31,26 @@ def EVP_BytesToKey(password, key_len, iv_len):
     iv = ms[key_len:key_len + iv_len]
     return (key, iv)
 
+try:
+    get_cryptography_evp = get_cryptography()[0]
+except:
+    get_cryptography_evp = get_evp
+
+try:
+    get_m2crypto_evp = get_m2crypto()[0]
+except:
+    get_m2crypto_evp = get_evp
+
 class Crypto(object):
     def __init__(self, key, alg='aes_256_cfb'):
         self._key=key.encode("utf-8") if isinstance(key, unicode) else key
         self._alg=alg
 
-        try:
-            self.get_evp = get_cryptography()[0] if "gcm" in alg else get_m2crypto()[0]
-        except:
-            self.get_evp = get_evp
-
+        self.get_evp = get_cryptography_evp if "gcm" in alg else get_m2crypto_evp
         self.iv_sent = False
         self._iv = rand_string(ALG_KEY_IV_LEN.get(self._alg)[1])
-        self._encipher = self.get_cipher(1, self._iv)
-        self.decipher = None
+        self._encipher = None
+        self._decipher = None
 
     def get_cipher(self, op, iv):
         key, _ = EVP_BytesToKey(self._key, ALG_KEY_IV_LEN.get(self._alg)[0], ALG_KEY_IV_LEN.get(self._alg)[1])
@@ -54,18 +60,20 @@ class Crypto(object):
         if self.iv_sent:
             return self._encipher.update(buf)
         else:
+            if self._encipher is None:
+                self._encipher = self.get_cipher(1, self._iv)
             self.iv_sent = True
             return self._iv + self._encipher.update(buf)
 
     def decrypt(self, buf):
-        if self.decipher is None:
+        if self._decipher is None:
             decipher_iv_len = ALG_KEY_IV_LEN.get(self._alg)[1]
             decipher_iv = buf[:decipher_iv_len]
-            self.decipher = self.get_cipher(0, decipher_iv)
+            self._decipher = self.get_cipher(0, decipher_iv)
             buf = buf[decipher_iv_len:]
             if len(buf) == 0:
                 return buf
-        return self.decipher.update(buf)
+        return self._decipher.update(buf)
 
 class SSProtocol(Protocol):
     def __init__(self, *args, **kwargs):
