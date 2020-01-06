@@ -125,6 +125,8 @@ class UdpPassResponse(object):
         self.data_time = time.time()
 
     def write(self, data):
+        if not data:
+            return
         if not self.conn:
             self.conn = sevent.udp.Socket()
             self.conn.on("data", self.on_data)
@@ -456,6 +458,8 @@ class UdpResponse(object):
         self.stream = None
 
     def write(self,data):
+        if not data:
+            return
         data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
@@ -522,6 +526,8 @@ class UdpRequest(object):
             response.write(data)
 
     def write(self, address, remote_address, data):
+        if not data:
+            return 
         if address:
             data = self.protocol.pack_udp(remote_address[0], remote_address[1], data)
             self.server.write((data, address))
