@@ -26,6 +26,7 @@ os.chdir(os.path.dirname(__file__) or '.')
 import time
 import struct
 import traceback
+from collections import defaultdict, deque
 import sevent
 import logging
 import socket
@@ -142,6 +143,73 @@ class UdpPassResponse(object):
     def get_recv_data_len(self):
         return self.recv_data_len
 
+class DnsSocket(sevent.udp.Socket):
+    _cache = defaultdict(deque)
+    _idle_check_timeout = None
+
+    def __init__(self, host_key, *args, **kwargs):
+        super(DnsSocket, self).__init__(*args, **kwargs)
+        super(DnsSocket, self).on_data(self.on_socket_data)
+        super(DnsSocket, self).on_close(self.on_socket_colse)
+
+        self.host_key = host_key
+        self.idle_time = 0
+
+    def on_data(self, callback):
+        self._events['data'] = {callback}
+        self.emit_data = callback
+
+    def on_socket_data(self, socket, buffer):
+        pass
+
+    def on_socket_colse(self, socket):
+        try:
+            self.__class__._cache[self.host_key].remove(socket)
+        except Exception as e:
+            logging.error("dns socket close error %s %s", self, e)
+
+    def close(self):
+        self.on_data(self.on_socket_data)
+        self.idle_time = time.time()
+        self._cache[self.host_key].append(self)
+
+    def do_close(self):
+        super(DnsSocket, self).close()
+
+    @classmethod
+    def instance(cls, host_key):
+        if not cls._idle_check_timeout:
+            cls._idle_check_timeout = loop.add_timeout(120, cls.check_timeout)
+        host_cache = cls._cache[host_key]
+        while host_cache:
+            socket = host_cache.pop()
+            if socket._state == sevent.udp.STATE_CLOSED:
+                continue
+            socket.idle_time = 0
+            return socket
+        return DnsSocket(host_key)
+
+    @classmethod
+    def check_timeout(cls):
+        try:
+            now = time.time()
+            for key, host_cache in cls._cache.items():
+                while host_cache:
+                    socket = host_cache[0]
+                    if socket.idle_time and now - socket.idle_time >= 300:
+                        host_cache.popleft()
+                        try:
+                            socket.do_close()
+                        except Exception as e:
+                            logging.error("dns socket close error %s %s", socket, e)
+                        continue
+                    elif socket._state == sevent.udp.STATE_CLOSED:
+                        host_cache.popleft()
+                        continue
+                    break
+        finally:
+            cls._idle_check_timeout = loop.add_timeout(120, cls.check_timeout)
+
 class DnsResponse(object):
     def __init__(self, request, address, remote_addr, remote_port, is_udp = True):
         self.request = request
@@ -243,8 +311,8 @@ class DnsResponse(object):
             rule = Rule(host)
             if not rule.check():
                 if self.conn is None:
-                    self.conn = sevent.udp.Socket()
-                    self.conn.on("data", self.on_udp_data)
+                    self.conn = DnsSocket.instance(self.direct_remote_addr)
+                    self.conn.on_data(self.on_udp_data)
                     self.remote_addr = self.direct_remote_addr
                 dns_record = self.handle_edns_client_subnet(dns_record)
                 self.conn.write((bytes(dns_record.pack()), (self.direct_remote_addr, 53)))
