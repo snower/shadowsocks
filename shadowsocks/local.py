@@ -168,7 +168,8 @@ class DnsSocket(sevent.udp.Socket):
         try:
             self.__class__._cache[self.host_key].remove(socket)
         except Exception as e:
-            logging.error("dns socket close error %s %s", self, e)
+            if self.idle_time <= 0:
+                logging.error("dns socket close error %s %s", self, e)
 
     def close(self):
         self.on_data(self.on_socket_data)
