@@ -21,9 +21,9 @@
 # SOFTWARE.
 
 from __future__ import with_statement
-import sys
 import os
 os.chdir(os.path.dirname(__file__) or '.')
+from collections import deque, defaultdict
 import time
 import struct
 import logging
@@ -31,6 +31,74 @@ import sevent
 from xstream.server import Server
 from utils import *
 import config
+
+class DnsSocket(sevent.udp.Socket):
+    _cache = defaultdict(deque)
+    _idle_check_timeout = None
+
+    def __init__(self, host_key, *args, **kwargs):
+        super(DnsSocket, self).__init__(*args, **kwargs)
+        super(DnsSocket, self).on_data(self.on_socket_data)
+        super(DnsSocket, self).on_close(self.on_socket_colse)
+
+        self.host_key = host_key
+        self.idle_time = 0
+
+    def on_data(self, callback):
+        self._events['data'] = {callback}
+        self.emit_data = callback
+
+    def on_socket_data(self, socket, buffer):
+        pass
+
+    def on_socket_colse(self, socket):
+        try:
+            self.__class__._cache[self.host_key].remove(socket)
+        except Exception as e:
+            if self.idle_time <= 0:
+                logging.error("dns socket close error %s %s", self, e)
+
+    def close(self):
+        self.on_data(self.on_socket_data)
+        self.idle_time = time.time()
+        self._cache[self.host_key].append(self)
+
+    def do_close(self):
+        super(DnsSocket, self).close()
+
+    @classmethod
+    def instance(cls, host_key):
+        if not cls._idle_check_timeout:
+            cls._idle_check_timeout = loop.add_timeout(120, cls.check_timeout)
+        host_cache = cls._cache[host_key]
+        while host_cache:
+            socket = host_cache.pop()
+            if socket._state == sevent.udp.STATE_CLOSED:
+                continue
+            socket.idle_time = 0
+            return socket
+        return DnsSocket(host_key)
+
+    @classmethod
+    def check_timeout(cls):
+        try:
+            now = time.time()
+            for key, host_cache in cls._cache.items():
+                while host_cache:
+                    socket = host_cache[0]
+                    if socket.idle_time and now - socket.idle_time >= 15 * 60:
+                        host_cache.popleft()
+                        try:
+                            socket.do_close()
+                        except Exception as e:
+                            logging.error("dns socket close error %s %s", socket, e)
+                        continue
+                    elif socket._state == sevent.udp.STATE_CLOSED:
+                        host_cache.popleft()
+                        continue
+                    break
+        finally:
+            cls._idle_check_timeout = loop.add_timeout(120, cls.check_timeout)
 
 class UdpResponse(object):
     def __init__(self, request):
@@ -62,6 +130,12 @@ class UdpResponse(object):
         while data:
             address, data = self.parse_addr_info(data)
             if address:
+                if self.conn is None:
+                    if address[1] == 53:
+                        self.conn = DnsSocket.instance(address[0])
+                    else:
+                        self.conn = sevent.udp.Socket()
+                    self.conn.on("data", self.on_data)
                 self.conn.write((data, address))
             data = buffer.next()
 
@@ -113,7 +187,10 @@ class ProxyResponse(object):
             return
 
         if self.is_connected or self.proxy_connection.is_enable_fast_open:
-            self.proxy_connection.write(data)
+            try:
+                self.proxy_connection.write(data)
+            except sevent.errors.SocketClosed:
+                pass
         else:
             self.buffer.append(str(data))
         self.send_data_len += len(data)
@@ -289,7 +366,10 @@ class Response(object):
         if not data:
             return
         if self.is_connected or self.conn.is_enable_fast_open:
-            self.conn.write(data)
+            try:
+                self.conn.write(data)
+            except sevent.errors.SocketClosed:
+                pass
         else:
             self.wbuffer = data
 

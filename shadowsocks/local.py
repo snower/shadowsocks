@@ -81,7 +81,10 @@ class PassResponse(object):
     def write(self,data):
         self.send_data_len += len(data)
         if self.is_connected or self.conn.is_enable_fast_open:
-            self.conn.write(data)
+            try:
+                self.conn.write(data)
+            except sevent.errors.SocketClosed:
+                pass
         else:
             self.buffer.append(data)
 
@@ -199,7 +202,7 @@ class DnsSocket(sevent.udp.Socket):
             for key, host_cache in cls._cache.items():
                 while host_cache:
                     socket = host_cache[0]
-                    if socket.idle_time and now - socket.idle_time >= 300:
+                    if socket.idle_time and now - socket.idle_time >= 15 * 60:
                         host_cache.popleft()
                         try:
                             socket.do_close()
