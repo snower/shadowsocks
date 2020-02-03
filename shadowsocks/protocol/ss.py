@@ -145,5 +145,11 @@ class SSProtocol(Protocol):
 
     def pack_udp(self, remote_addr, remote_port, data):
         crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
-        data = "".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
+        try:
+            data = "".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
+        except:
+            try:
+                data = "".join([struct.pack(">B", 4), socket.inet_pton(socket.AF_INET6, remote_addr), struct.pack(">H", remote_port), data])
+            except:
+                data = "".join([struct.pack(">BB", 3, len(remote_port)), remote_addr, struct.pack(">H", remote_port), data])
         return crypto.encrypt(data)
