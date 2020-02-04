@@ -109,16 +109,8 @@ class UdpPassResponse(object):
         self.send_data_len = 0
         self.recv_data_len = 0
 
-        loop.add_timeout(30, self.on_timeout)
-
-    def on_timeout(self):
-        if time.time() - self.data_time >= 300:
-            if self.conn:
-                self.conn.close()
-            self.request.end(self.address)
-            self.conn = None
-        else:
-            loop.add_timeout(30, self.on_timeout)
+    def on_close(self, s):
+        self.conn = None
 
     def on_data(self, s, buffer):
         while buffer:
@@ -133,14 +125,20 @@ class UdpPassResponse(object):
         if not self.conn:
             self.conn = sevent.udp.Socket()
             self.conn.on("data", self.on_data)
+            self.conn.on("close", self.on_close)
 
-        self.conn.write((data, (self.remote_addr, self.remote_port)))
+        try:
+            self.conn.write((data, (self.remote_addr, self.remote_port)))
+        except sevent.errors.SocketClosed:
+            pass
         self.send_data_len += len(data)
         self.data_time = time.time()
 
     def end(self):
-        self.conn.close()
-        self.conn = None
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+        self.request.end()
 
     def get_send_data_len(self):
         return self.send_data_len
@@ -500,6 +498,19 @@ class UdpRequest(object):
         self.server = server
         self.server.on("data", self.on_data)
 
+    @classmethod
+    def on_data_timeout(cls):
+        try:
+            now = time.time()
+            for address, response in cls.caches.items():
+                if not isinstance(response, UdpPassResponse):
+                    continue
+
+                if now - response.data_time >= 120:
+                    response.end()
+        finally:
+            loop.add_timeout(30, cls.on_data_timeout)
+
     def on_data(self, s, buffer):
         while buffer:
             data, address = buffer.next()
@@ -605,23 +616,26 @@ class Request(object):
         conn.on('end', self.on_end)
         conn.on('close', self.on_close)
 
-
-        def on_data_timeout():
-            if self.closed:
-                return
-
-            if time.time() - self.data_time > 15 * 60:
-                return self.end()
-            sevent.current().add_timeout(30, on_data_timeout)
-
         def on_timeout():
             if self.closed:
                 return
 
             if not self.protocol or not self.protocol_parse_end:
                 return self.end()
-            sevent.current().add_timeout(30, on_data_timeout)
-        sevent.current().add_timeout(0.5, on_timeout)
+        loop.add_timeout(0.5, on_timeout)
+
+    @classmethod
+    def on_data_timeout(cls):
+        try:
+            now = time.time()
+            for request in cls._requests:
+                if request.closed:
+                    continue
+
+                if now - request.data_time > 15 * 60:
+                    request.end()
+        finally:
+            loop.add_timeout(30, cls.on_data_timeout)
 
     def parse(self,data):
         try:
@@ -823,6 +837,8 @@ if __name__ == '__main__':
         ss_udp_server.bind((config.BIND_ADDR, config.SSPORT))
 
         client.open()
+        loop.add_timeout(30, Request.on_data_timeout)
+        loop.add_timeout(30, UdpRequest.on_data_timeout)
         loop.start()
     except:
         traceback.print_exc()
