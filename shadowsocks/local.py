@@ -110,6 +110,8 @@ class UdpPassResponse(object):
         self.recv_data_len = 0
 
     def on_close(self, s):
+        if self.conn:
+            self.request.end(self.address)
         self.conn = None
 
     def on_data(self, s, buffer):
@@ -138,7 +140,7 @@ class UdpPassResponse(object):
         if self.conn:
             self.conn.close()
             self.conn = None
-        self.request.end()
+        self.request.end(self.address)
 
     def get_send_data_len(self):
         return self.send_data_len
