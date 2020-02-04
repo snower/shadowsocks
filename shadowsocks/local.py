@@ -112,7 +112,7 @@ class UdpPassResponse(object):
         loop.add_timeout(30, self.on_timeout)
 
     def on_timeout(self):
-        if self.data_time >= 300:
+        if time.time() - self.data_time >= 300:
             if self.conn:
                 self.conn.close()
             self.request.end(self.address)
@@ -252,7 +252,7 @@ class DnsResponse(object):
         self.buffer = []
 
     def on_timeout(self):
-        if self.data_time >= 10:
+        if time.time() - self.data_time >= 10:
             if self.stream:
                 self.stream.close()
             if self.conn:
@@ -506,25 +506,25 @@ class UdpRequest(object):
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
                 if config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK):
-                    response = self.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
-                    logging.info('%s udp connecting by direct %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
                 elif remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
-                    response = self.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
-                    logging.info('%s udp connecting by dns %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                    response = self.__class__.caches[address] = DnsResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by dns %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
                 elif isinstance(self.protocol, SSProtocol) and remote_port != 443:
-                    response = self.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
-                    logging.info('%s udp connecting by direct %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
                 elif config.USE_RULE:
                     rule = Rule(self.protocol.remote_addr)
                     if not rule.check():
-                        response = self.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
-                        logging.info('%s udp connecting by direct %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                        response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
+                        logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
                     else:
-                        response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
-                        logging.info('%s udp connecting by proxy %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                        response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
+                        logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
                 else:
-                    response = self.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
-                    logging.info('%s udp connecting by proxy %s:%s -> %s:%s', self.protocol, address[0], address[1], remote_addr, remote_port)
+                    response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port)
+                    logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
             else:
                 response = self.caches[address]
             response.write(data)
@@ -539,7 +539,7 @@ class UdpRequest(object):
     def end(self, address):
         try:
             response = self.caches[address]
-            del self.caches[address]
+            del self.__class__.caches[address]
             logging.info('%s udp connected %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol,
                          address[0], address[1],
                          response.remote_addr, response.remote_port,
@@ -591,6 +591,7 @@ class Response(object):
 
 class Request(object):
     _requests=[]
+
     def __init__(self, conn):
         self.conn = conn
         self.response = None
@@ -708,7 +709,7 @@ class Request(object):
         self.closed = True
         if self.response:
             self.response.end()
-        self._requests.remove(self)
+        self.__class__._requests.remove(self)
         logging.info('%s connected %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol,
                      self.conn.address[0], self.conn.address[1],
                      self.response.remote_addr if self.response else (self.protocol.remote_addr if self.protocol else ''),
