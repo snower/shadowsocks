@@ -518,7 +518,8 @@ class UdpRequest(object):
             data, address = buffer.next()
             remote_addr, remote_port, data = self.protocol.unpack_udp(data)
             if address not in self.caches:
-                if config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK):
+                if (config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK)) \
+                        or remote_addr in config.LOCAL_HOSTS:
                     response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port)
                     logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, address[0], address[1], remote_addr, remote_port, len(self.caches))
                 elif remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
@@ -651,15 +652,15 @@ class Request(object):
                 raise Exception("adder is empty %:%", self.protocol.remote_addr, self.protocol.remote_port)
 
 
-            if config.LOCAL_NETWORK:
-                if self.protocol.remote_addr.startswith(config.LOCAL_NETWORK):
-                    self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-                    self.response.write(e.data)
-                    logging.info('%s connecting by direct %s:%s -> %s:%s %s', self.protocol,
-                                 self.conn.address[0], self.conn.address[1],
-                                 self.response.remote_addr, self.response.remote_port,
-                                 len(self._requests))
-                    return
+            if (config.LOCAL_NETWORK and self.protocol.remote_addr.startswith(config.LOCAL_NETWORK)) \
+                    or self.protocol.remote_addr in config.LOCAL_HOSTS:
+                self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
+                self.response.write(e.data)
+                logging.info('%s connecting by direct %s:%s -> %s:%s %s', self.protocol,
+                             self.conn.address[0], self.conn.address[1],
+                             self.response.remote_addr, self.response.remote_port,
+                             len(self._requests))
+                return
                 
             if self.protocol.remote_port == 53 and self.protocol.remote_addr in config.EDNS_CLIENT_SUBNETS:
                 self.response =  DnsResponse(self, self.conn.address, self.protocol.remote_addr, self.protocol.remote_port, False)
@@ -771,12 +772,16 @@ class SSRequest(Request):
         self.prbuffer = None
 
     def on_drain(self, buffer):
-        pass
+        if not (self.prbuffer is None):
+            self.prbuffer.do_drain()
+            while self.prbuffer:
+                self.wbuffer.write(self.protocol._crypto.encrypt(self.prbuffer.next()))
 
     def on_regain(self, buffer):
-        if self.prbuffer:
+        if not (self.prbuffer is None):
             self.prbuffer.do_regain()
-            self.prbuffer = None
+            while self.prbuffer:
+                self.wbuffer.write(self.protocol._crypto.encrypt(self.prbuffer.next()))
 
     def on_data(self, s, data):
         self.data_time = time.time()
@@ -800,11 +805,10 @@ class SSRequest(Request):
         if data.__class__ == sevent.Buffer:
             while data:
                 self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
-            if self.wbuffer._full:
-                self.prbuffer = data
-                data.do_drain()
+            self.prbuffer = data
         else:
             self.wbuffer.write(self.protocol._crypto.encrypt(data))
+            self.prbuffer = None
         self.conn.write(self.wbuffer)
         self.data_time = time.time()
 
