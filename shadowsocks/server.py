@@ -342,7 +342,7 @@ class Response(object):
         if self.file_buffer.wlen <= self.file_buffer.rlen and len(self.rbuffer) < self.rbuffer._regain_size:
             while data:
                 self.rbuffer.write(data.next())
-            return self.request.write(data)
+            return self.request.write(self.rbuffer)
 
     def on_end(self, s):
         pass

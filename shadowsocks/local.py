@@ -44,29 +44,29 @@ import config
 
 class PassResponse(object):
     def __init__(self, request, protocol, remote_addr, remote_port):
-        self.conn = sevent.tcp.Socket()
-        self.conn.enable_fast_open()
         self.request = request
         self.protocol = protocol
         self.remote_addr = remote_addr
         self.remote_port = remote_port
         self.is_connected=False
-        self.buffer=[]
+        self.buffer = None
         self.time=time.time()
         self.send_data_len = 0
         self.recv_data_len = 0
+
+        self.conn = sevent.tcp.Socket()
         self.conn.enable_fast_open()
         self.conn.enable_nodelay()
         self.conn.on('connect', self.on_connect)
         self.conn.on('data', self.on_data)
         self.conn.on('close', self.on_close)
         self.conn.on('end', self.on_end)
-        self.conn.connect((self.request.protocol.remote_addr,self.request.protocol.remote_port),30)
+        self.conn.connect((self.request.protocol.remote_addr, self.request.protocol.remote_port), 30)
 
     def on_connect(self, s):
         self.is_connected=True
-        for b in self.buffer:
-            self.write(b)
+        if self.buffer:
+            self.write(self.buffer)
 
     def on_data(self, s, data):
         self.recv_data_len += len(data)
@@ -78,7 +78,7 @@ class PassResponse(object):
     def on_end(self, s):
         pass
 
-    def write(self,data):
+    def write(self, data):
         self.send_data_len += len(data)
         if self.is_connected or self.conn.is_enable_fast_open:
             try:
@@ -86,7 +86,7 @@ class PassResponse(object):
             except sevent.errors.SocketClosed:
                 pass
         else:
-            self.buffer.append(data)
+            self.buffer = data
 
     def end(self):
         self.conn.close()
@@ -571,14 +571,14 @@ class Response(object):
         self.remote_port = remote_port
         self.time=time.time()
         self.stream = None
-        self.buffer = []
+        self.buffer = None
 
         def on_session(client, session):
             self.stream = session.stream()
             self.stream.on('data', self.on_data)
             self.stream.on('close', self.on_close)
-            for b in self.buffer:
-                self.write(b)
+            if self.buffer:
+                self.write(self.buffer)
         client.session(on_session)
 
     def on_data(self, s, data):
@@ -591,7 +591,7 @@ class Response(object):
         if self.stream:
             self.stream.write(data)
         else:
-            self.buffer.append(data)
+            self.buffer = data
 
     def end(self):
         if self.stream:
@@ -640,7 +640,7 @@ class Request(object):
         finally:
             loop.add_timeout(30, cls.on_data_timeout)
 
-    def parse(self,data):
+    def parse(self, data, buffer):
         try:
             self.protocol.parse(data)
         except ProtocolParseEndError,e:
@@ -655,7 +655,9 @@ class Request(object):
             if (config.LOCAL_NETWORK and self.protocol.remote_addr.startswith(config.LOCAL_NETWORK)) \
                     or self.protocol.remote_addr in config.LOCAL_HOSTS:
                 self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-                self.response.write(e.data)
+                if e.data:
+                    buffer.write(e.data)
+                    self.response.write(buffer)
                 logging.info('%s connecting by direct %s:%s -> %s:%s %s', self.protocol,
                              self.conn.address[0], self.conn.address[1],
                              self.response.remote_addr, self.response.remote_port,
@@ -664,7 +666,9 @@ class Request(object):
                 
             if self.protocol.remote_port == 53 and self.protocol.remote_addr in config.EDNS_CLIENT_SUBNETS:
                 self.response =  DnsResponse(self, self.conn.address, self.protocol.remote_addr, self.protocol.remote_port, False)
-                self.response.write(e.data)
+                if e.data:
+                    buffer.write(e.data)
+                    self.response.write(buffer)
                 logging.info('%s connecting by dns %s:%s -> %s:%s %s', self.protocol,
                              self.conn.address[0], self.conn.address[1],
                              self.response.remote_addr, self.response.remote_port,
@@ -675,7 +679,9 @@ class Request(object):
                 rule = Rule(self.protocol.remote_addr)
                 if  not rule.check():
                     self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-                    self.response.write(e.data)
+                    if e.data:
+                        buffer.write(e.data)
+                        self.response.write(buffer)
                     logging.info('%s connecting by direct %s:%s -> %s:%s %s',self.protocol,
                                  self.conn.address[0], self.conn.address[1],
                                  self.response.remote_addr, self.response.remote_port,
@@ -683,9 +689,10 @@ class Request(object):
                     return
 
             self.response=Response(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-            self.response.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),
+            buffer.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),
                                          self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),
                                          e.data]))
+            self.response.write(buffer)
 
             logging.info('%s connecting by proxy %s:%s -> %s:%s %s',self.protocol,
                          self.conn.address[0], self.conn.address[1],
@@ -695,15 +702,15 @@ class Request(object):
             logging.error(traceback.format_exc())
             self.end()
 
-    def on_data(self, s, data):
+    def on_data(self, s, buffer):
         self.data_time = time.time()
         if self.protocol_parse_end:
             if not self.response:
                 return
-            return self.response.write(data)
+            return self.response.write(buffer)
 
         if self.protocol is None:
-            data = data.read(-1)
+            data = buffer.read(-1)
             if data[0] == '\x05':
                 self.protocol = Sock5Protocol(self)
             elif data[0] == '\x04':
@@ -715,9 +722,9 @@ class Request(object):
                     self.protocol = HttpProtocol(self)
                 else:
                     self.protocol = RedirectProtocol(self)
-            self.parse(data)
+            self.parse(data, buffer)
         else:
-            self.parse(data.read(-1))
+            self.parse(buffer.read(-1), buffer)
 
     def on_end(self, s):
        pass
@@ -766,36 +773,54 @@ class SSRequest(Request):
     def __init__(self, conn):
         super(SSRequest, self).__init__(conn)
 
+        self.rbuffer = sevent.Buffer()
+        self.rbuffer.on("drain", self.on_rdrain)
+        self.rbuffer.on("regain", self.on_rregain)
+        self.pwbuffer = None
+
         self.wbuffer = sevent.Buffer()
-        self.wbuffer.on("drain", self.on_drain)
-        self.wbuffer.on("regain", self.on_regain)
+        self.wbuffer.on("drain", self.on_wdrain)
+        self.wbuffer.on("regain", self.on_wregain)
         self.prbuffer = None
 
-    def on_drain(self, buffer):
+    def on_rdrain(self, buffer):
+        if not (self.pwbuffer is None):
+            self.pwbuffer.do_drain()
+            while self.pwbuffer:
+                self.rbuffer.write(self.protocol._crypto.decrypt(self.pwbuffer.next()))
+
+    def on_rregain(self, buffer):
+        if not (self.pwbuffer is None):
+            self.pwbuffer.do_regain()
+            while self.pwbuffer:
+                self.rbuffer.write(self.protocol._crypto.decrypt(self.pwbuffer.next()))
+
+    def on_wdrain(self, buffer):
         if not (self.prbuffer is None):
             self.prbuffer.do_drain()
             while self.prbuffer:
                 self.wbuffer.write(self.protocol._crypto.encrypt(self.prbuffer.next()))
 
-    def on_regain(self, buffer):
+    def on_wregain(self, buffer):
         if not (self.prbuffer is None):
             self.prbuffer.do_regain()
             while self.prbuffer:
                 self.wbuffer.write(self.protocol._crypto.encrypt(self.prbuffer.next()))
 
-    def on_data(self, s, data):
+    def on_data(self, s, buffer):
         self.data_time = time.time()
         if self.protocol_parse_end:
-            while data:
-                self.response.write(self.protocol._crypto.decrypt(data.next()))
+            while buffer:
+                self.rbuffer.write(self.protocol._crypto.decrypt(buffer.next()))
+            self.pwbuffer = buffer
+            self.response.write(self.rbuffer)
             return
 
         if self.protocol is None:
-            data = data.read(-1)
             self.protocol = SSProtocol(self)
-            self.parse(data)
+            self.parse(buffer.read(-1), self.rbuffer)
         else:
-            self.parse(data.read(-1))
+            self.parse(buffer.read(-1), self.rbuffer)
 
     def write(self, data):
         if self.protocol_parse_end:
