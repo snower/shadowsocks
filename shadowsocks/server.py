@@ -115,7 +115,7 @@ class UdpResponse(object):
             remote_addr = data[2: addr_len + 2]
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
-        except Exception, e:
+        except Exception as e:
             logging.error("parse addr error: %s %s", e, data)
             return  None, ''
 
@@ -297,8 +297,7 @@ class Response(object):
             return
 
         self.rbuffer = sevent.Buffer(2 * 1024 * 1024)
-        while buffer:
-            self.rbuffer.write(buffer.next())
+        self.rbuffer.extend(buffer)
         self.rbuffer.on("drain", self.on_rbuffer_drain)
         self.rbuffer.on("regain", self.on_rbuffer_regain)
         self.request.stream._send_buffer = self.rbuffer
@@ -340,8 +339,7 @@ class Response(object):
             return self.request.write(data)
 
         if self.file_buffer.wlen <= self.file_buffer.rlen and len(self.rbuffer) < self.rbuffer._regain_size:
-            while data:
-                self.rbuffer.write(data.next())
+            self.rbuffer.extend(data)
             return self.request.write(self.rbuffer)
 
     def on_end(self, s):
