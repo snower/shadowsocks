@@ -31,7 +31,7 @@ import sevent
 import logging
 import socket
 import dnslib
-from utils import *
+from utils import format_data_count
 from protocol import ProtocolParseEndError
 from protocol.http import HttpProtocol
 from protocol.sock4 import Sock4Protocol
@@ -65,6 +65,9 @@ class PassResponse(object):
 
     def on_connect(self, s):
         self.is_connected=True
+        rbuffer, wbuffer = self.conn.buffer()
+        wbuffer.link(self.request.rbuffer)
+        self.request.wbuffer.link(rbuffer)
         if self.buffer:
             self.write(self.buffer)
 
@@ -385,7 +388,7 @@ class DnsResponse(object):
             remote_addr = data[2: addr_len + 2]
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
-        except Exception, e:
+        except Exception as e:
             logging.error("parse addr error: %s %s", e, data)
             return None, ''
 
@@ -482,7 +485,7 @@ class UdpResponse(object):
             remote_addr = data[2: addr_len + 2]
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
-        except Exception, e:
+        except Exception as e:
             logging.error("parse addr error: %s %s", e, data)
             return None, ''
 
@@ -577,6 +580,9 @@ class Response(object):
             self.stream = session.stream()
             self.stream.on('data', self.on_data)
             self.stream.on('close', self.on_close)
+            rbuffer, wbuffer = self.stream.buffer()
+            wbuffer.link(self.request.rbuffer)
+            self.request.wbuffer.link(rbuffer)
             if self.buffer:
                 self.write(self.buffer)
         client.session(on_session)
@@ -587,7 +593,7 @@ class Response(object):
     def on_close(self, s):
         self.request.end()
 
-    def write(self,data):
+    def write(self, data):
         if self.stream:
             self.stream.write(data)
         else:
@@ -614,6 +620,7 @@ class Request(object):
         self.time=time.time()
         self.data_time=time.time()
         self.closed=False
+        self.rbuffer, self.wbuffer = conn.buffer()
 
         conn.on('data', self.on_data)
         conn.on('end', self.on_end)
@@ -643,7 +650,7 @@ class Request(object):
     def parse(self, data, buffer):
         try:
             self.protocol.parse(data)
-        except ProtocolParseEndError,e:
+        except ProtocolParseEndError as e:
             self.protocol_parse_end = True
             if e.inet_ut != '\x01':
                 return
@@ -744,7 +751,7 @@ class Request(object):
         self.response = None
         self.protocol = None
 
-    def write(self,data):
+    def write(self, data):
         if self.protocol_parse_end:
             if not self.response:
                 return
@@ -774,45 +781,17 @@ class SSRequest(Request):
         super(SSRequest, self).__init__(conn)
 
         self.rbuffer = sevent.Buffer()
-        self.rbuffer.on("drain", self.on_rdrain)
-        self.rbuffer.on("regain", self.on_rregain)
-        self.pwbuffer = None
-
         self.wbuffer = sevent.Buffer()
-        self.wbuffer.on("drain", self.on_wdrain)
-        self.wbuffer.on("regain", self.on_wregain)
-        self.prbuffer = None
 
-    def on_rdrain(self, buffer):
-        if not (self.pwbuffer is None):
-            self.pwbuffer.do_drain()
-            while self.pwbuffer:
-                self.rbuffer.write(self.protocol._crypto.decrypt(self.pwbuffer.next()))
-
-    def on_rregain(self, buffer):
-        if not (self.pwbuffer is None):
-            self.pwbuffer.do_regain()
-            while self.pwbuffer:
-                self.rbuffer.write(self.protocol._crypto.decrypt(self.pwbuffer.next()))
-
-    def on_wdrain(self, buffer):
-        if not (self.prbuffer is None):
-            self.prbuffer.do_drain()
-            while self.prbuffer:
-                self.wbuffer.write(self.protocol._crypto.encrypt(self.prbuffer.next()))
-
-    def on_wregain(self, buffer):
-        if not (self.prbuffer is None):
-            self.prbuffer.do_regain()
-            while self.prbuffer:
-                self.wbuffer.write(self.protocol._crypto.encrypt(self.prbuffer.next()))
+        rbuffer, wbuffer = conn.buffer()
+        self.rbuffer.link(rbuffer)
+        wbuffer.link(self.wbuffer)
 
     def on_data(self, s, buffer):
         self.data_time = time.time()
         if self.protocol_parse_end:
             while buffer:
                 self.rbuffer.write(self.protocol._crypto.decrypt(buffer.next()))
-            self.pwbuffer = buffer
             self.response.write(self.rbuffer)
             return
 
@@ -830,10 +809,8 @@ class SSRequest(Request):
         if data.__class__ == sevent.Buffer:
             while data:
                 self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
-            self.prbuffer = data
         else:
             self.wbuffer.write(self.protocol._crypto.encrypt(data))
-            self.prbuffer = None
         self.conn.write(self.wbuffer)
         self.data_time = time.time()
 

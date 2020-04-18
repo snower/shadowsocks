@@ -29,7 +29,7 @@ import struct
 import logging
 import sevent
 from xstream.server import Server
-from utils import *
+from utils import format_data_count
 import config
 
 class DnsSocket(sevent.udp.Socket):
@@ -237,6 +237,8 @@ class FileBuffer(object):
         self.fp.seek(self.rlen, os.SEEK_SET)
         if size < 0:
             size = self.wlen - self.rlen
+        else:
+            size = min(size, self.wlen - self.rlen)
         self.rlen += size
         return self.fp.read(size)
 
@@ -251,11 +253,9 @@ class Response(object):
     def __init__(self, request):
         self.conn = sevent.tcp.Socket()
         self.request = request
-        self.is_connected=False
+        self.is_connected = False
         self.is_ended = False
-        self.wbuffer = None
-        self.rbuffer = None
-        self.pbuffer = None
+        self.buffer = None
         self.file_buffer = None
         self.time=time.time()
 
@@ -267,25 +267,18 @@ class Response(object):
         self.conn.on('data', self.on_data)
         self.conn.on('close', self.on_close)
         self.conn.on('end', self.on_end)
-        self.conn.connect((self.request.remote_addr,self.request.remote_port),30)
+        self.conn.connect((self.request.remote_addr, self.request.remote_port),30)
 
     def on_connect(self, s):
-        self.is_connected=True
-        if self.wbuffer:
-            self.write(self.wbuffer)
-        self.pbuffer = s._rbuffers
-        self.pbuffer.remove_all_listeners()
-        self.pbuffer.on("drain", self.on_drain)
-        self.pbuffer.on("regain", self.on_regain)
+        self.is_connected = True
+        self.request.wbuffer.on("drain", self.on_drain)
+        self.request.wbuffer.on("regain", self.on_regain)
+
+        if self.buffer:
+            self.write(self.buffer)
 
     def on_drain(self, buffer):
-        if self.file_buffer is False:
-            return
-
-        if self.file_buffer:
-            if len(buffer) < 0:
-                return
-            sevent.current().add_async(lambda : self.file_buffer.write(buffer.read()))
+        if self.file_buffer is False or self.file_buffer:
             return
 
         self.file_buffer = FileBuffer()
@@ -294,53 +287,27 @@ class Response(object):
         except Exception as e:
             logging.error("open filebuffer error: %s", e)
             self.file_buffer = False
-            return
-
-        self.rbuffer = sevent.Buffer(2 * 1024 * 1024)
-        self.rbuffer.extend(buffer)
-        self.rbuffer.on("drain", self.on_rbuffer_drain)
-        self.rbuffer.on("regain", self.on_rbuffer_regain)
-        self.request.stream._send_buffer = self.rbuffer
-        buffer._drain_size = 1024 * 1024
-        buffer._regain_size = 1
-        sevent.current().add_async(lambda : self.request.write(self.rbuffer))
 
     def on_regain(self, buffer):
-        pass
+        if self.file_buffer.wlen > self.file_buffer.rlen:
+            wlen = self.request.wbuffer._drain_size - len(self.request.wbuffer) + 16
+            self.request.write(self.file_buffer.read(wlen))
 
-    def on_rbuffer_drain(self, buffer):
-        pass
-
-    def on_rbuffer_regain(self, buffer):
-        def do_write(self, buffer):
-            buffer_len = self.file_buffer.wlen - self.file_buffer.rlen
-            if buffer_len > 0:
-                wlen = buffer._drain_size - len(buffer) + 1
-                if wlen > buffer_len:
-                    wlen = buffer_len
-                buffer.write(self.file_buffer.read(wlen))
-                self.request.write(buffer)
-
-            if self.file_buffer.wlen <= self.file_buffer.rlen:
-                if self.pbuffer:
-                    buffer.write(self.pbuffer.read())
-
-                if self.is_ended:
-                    def do_close(self):
-                        self.file_buffer.close()
-                        self.file_buffer = None
-                        self.request.end()
-                    sevent.current().add_async(do_close, self)
-
-        sevent.current().add_async(do_write, self, buffer)
+        if self.file_buffer.wlen <= self.file_buffer.rlen and self.is_ended:
+            self.request.end()
 
     def on_data(self, s, data):
         if not self.file_buffer:
             return self.request.write(data)
 
-        if self.file_buffer.wlen <= self.file_buffer.rlen and len(self.rbuffer) < self.rbuffer._regain_size:
-            self.rbuffer.extend(data)
-            return self.request.write(self.rbuffer)
+        if self.request.wbuffer.full:
+            return self.file_buffer.write(data.read())
+
+        if self.file_buffer.wlen > self.file_buffer.rlen:
+            self.file_buffer.write(data.read())
+            wlen = self.request.wbuffer._drain_size - len(self.request.wbuffer) + 16
+            return self.request.write(self.file_buffer.read(wlen))
+        return self.request.write(data)
 
     def on_end(self, s):
         pass
@@ -348,28 +315,19 @@ class Response(object):
     def on_close(self, s):
         if not self.file_buffer:
             return self.request.end()
+        self.is_ended = True
 
-        def do_write(self):
-            if self.pbuffer:
-                self.file_buffer.write(self.pbuffer.read())
-            self.is_ended = True
-            if self.file_buffer.wlen <= self.file_buffer.rlen:
-                self.file_buffer.close()
-                self.file_buffer = None
-                return self.request.end()
-            self.on_rbuffer_drain(self.rbuffer)
-        sevent.current().add_async(do_write, self)
-
-    def write(self,data):
+    def write(self, data):
         if not data:
             return
+
         if self.is_connected or self.conn.is_enable_fast_open:
             try:
                 self.conn.write(data)
             except sevent.errors.SocketClosed:
                 pass
         else:
-            self.wbuffer = data
+            self.buffer = data
 
     def end(self):
         self.conn.end()
@@ -386,6 +344,7 @@ class Request(object):
         self.header_length=0
         self.response = None
         self.time=time.time()
+        self.rbuffer, self.wbuffer = stream.buffer()
 
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
@@ -396,7 +355,7 @@ class Request(object):
             self.remote_addr = data.read(addr_len)
             self.remote_port, = struct.unpack('>H', data.read(2))
             self.header_length = addr_len + 4
-        except Exception,e:
+        except Exception as e:
             logging.error("parse addr error: %s %s",e,data)
             self.end()
             return False
