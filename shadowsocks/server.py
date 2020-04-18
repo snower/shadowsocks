@@ -344,7 +344,7 @@ class Request(object):
         self.header_length=0
         self.response = None
         self.time=time.time()
-        self.rbuffer, self.wbuffer = stream.buffer()
+        self.rbuffer, self.wbuffer = stream.buffer
 
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)

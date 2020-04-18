@@ -65,7 +65,7 @@ class PassResponse(object):
 
     def on_connect(self, s):
         self.is_connected=True
-        rbuffer, wbuffer = self.conn.buffer()
+        rbuffer, wbuffer = self.conn.buffer
         wbuffer.link(self.request.rbuffer)
         self.request.wbuffer.link(rbuffer)
         if self.buffer:
@@ -580,7 +580,7 @@ class Response(object):
             self.stream = session.stream()
             self.stream.on('data', self.on_data)
             self.stream.on('close', self.on_close)
-            rbuffer, wbuffer = self.stream.buffer()
+            rbuffer, wbuffer = self.stream.buffer
             wbuffer.link(self.request.rbuffer)
             self.request.wbuffer.link(rbuffer)
             if self.buffer:
@@ -620,7 +620,7 @@ class Request(object):
         self.time=time.time()
         self.data_time=time.time()
         self.closed=False
-        self.rbuffer, self.wbuffer = conn.buffer()
+        self.rbuffer, self.wbuffer = conn.buffer
 
         conn.on('data', self.on_data)
         conn.on('end', self.on_end)
@@ -783,7 +783,7 @@ class SSRequest(Request):
         self.rbuffer = sevent.Buffer()
         self.wbuffer = sevent.Buffer()
 
-        rbuffer, wbuffer = conn.buffer()
+        rbuffer, wbuffer = conn.buffer
         self.rbuffer.link(rbuffer)
         wbuffer.link(self.wbuffer)
 
