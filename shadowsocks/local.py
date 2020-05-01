@@ -366,7 +366,7 @@ class DnsResponse(object):
                 client.session(self.on_session)
             if not self.is_udp and not self.use_udp:
                 data = struct.pack("!H", len(data)) + data
-            data = b"".join([struct.pack(">H", len(self.proxy_remote_addr)), self.proxy_remote_addr, struct.pack('>H', self.remote_port), data])
+            data = b"".join([struct.pack(">H", len(self.proxy_remote_addr)), self.proxy_remote_addr.encode("utf-8"), struct.pack('>H', self.remote_port), data])
             if self.stream:
                 self.stream.write(data)
             else:
