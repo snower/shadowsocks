@@ -83,7 +83,7 @@ class DnsSocket(sevent.udp.Socket):
     def check_timeout(cls):
         try:
             now = time.time()
-            for key, host_cache in cls._cache.items():
+            for key, host_cache in tuple(cls._cache.items()):
                 while host_cache:
                     socket = host_cache[0]
                     if socket.idle_time and now - socket.idle_time >= 15 * 60:
