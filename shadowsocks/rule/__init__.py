@@ -18,7 +18,7 @@ class Rule(object):
         hosts = self.host.split(".")
         if len(rules) > 2:
             for i in range(len(rules) - 2):
-                host = b".".join(hosts[-(i+2):])
+                host = ".".join(hosts[-(i+2):])
                 if host in rules:
                     return True
         return False

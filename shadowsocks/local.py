@@ -360,6 +360,7 @@ class DnsResponse(object):
                     continue
                 self.use_udp = True
             except Exception as e:
+                logging.error(traceback.format_exc())
                 logging.info("parse dns error:%s", e)
 
             if self.stream is None:
