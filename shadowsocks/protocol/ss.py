@@ -18,7 +18,7 @@ from xstream.crypto import rand_string, get_cryptography, get_m2crypto, get_open
 def EVP_BytesToKey(password, key_len, iv_len):
     m = []
     i = 0
-    while len(''.join(m)) < (key_len + iv_len):
+    while len(b''.join(m)) < (key_len + iv_len):
         md5 = hashlib.md5()
         data = password
         if i > 0:
@@ -26,7 +26,7 @@ def EVP_BytesToKey(password, key_len, iv_len):
         md5.update(data)
         m.append(md5.digest())
         i += 1
-    ms = ''.join(m)
+    ms = b''.join(m)
     key = ms[:key_len]
     iv = ms[key_len:key_len + iv_len]
     return (key, iv)
@@ -43,8 +43,8 @@ except:
 
 class Crypto(object):
     def __init__(self, key, alg='aes_256_cfb'):
-        self._key=key.encode("utf-8") if isinstance(key, unicode) else key
-        self._alg=alg
+        self._key = key.encode("utf-8") if isinstance(key, str) else key
+        self._alg = alg
 
         self.get_evp = get_cryptography_evp if "gcm" in alg else get_m2crypto_evp
         self.iv_sent = False
@@ -82,7 +82,7 @@ class SSProtocol(Protocol):
         self._crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
 
     def parse_header(self, data):
-        addrtype = ord(data[0])
+        addrtype = data[0]
         if addrtype == ADDRTYPE_IPV4:
             if len(data) >= 7:
                 dest_addr = socket.inet_ntoa(data[1:5])
@@ -92,11 +92,10 @@ class SSProtocol(Protocol):
                 raise Exception('header is too short')
         elif addrtype == ADDRTYPE_HOST:
             if len(data) > 2:
-                addrlen = ord(data[1])
+                addrlen = data[1]
                 if len(data) >= 2 + addrlen:
-                    dest_addr = data[2:2 + addrlen]
-                    dest_port = struct.unpack('>H', data[2 + addrlen:4 +
-                                              addrlen])[0]
+                    dest_addr = data[2:2 + addrlen].decode('utf-8')
+                    dest_port = struct.unpack('>H', data[2 + addrlen:4 + addrlen])[0]
                     header_length = 4 + addrlen
                 else:
                     raise Exception('header is too short')
@@ -124,7 +123,7 @@ class SSProtocol(Protocol):
     def unpack_udp(self, data):
         crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         data = crypto.decrypt(data)
-        addr_type = ord(data[0])
+        addr_type = data[0]
         if addr_type == 1:
             remote_addr = socket.inet_ntoa(data[1:5])
             remote_port = data[5:7]
@@ -134,7 +133,7 @@ class SSProtocol(Protocol):
             remote_port = data[17:19]
             header_length = 19
         elif addr_type == 3:
-            addr_len = ord(data[1])
+            addr_len = data[1]
             remote_addr = data[2:2 + addr_len]
             remote_port = data[2 + addr_len:2 + addr_len + 2]
             header_length = 2 + addr_len + 2
@@ -146,10 +145,10 @@ class SSProtocol(Protocol):
     def pack_udp(self, remote_addr, remote_port, data):
         crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         try:
-            data = "".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
+            data = b"".join([struct.pack(">B", 1), socket.inet_aton(remote_addr), struct.pack(">H", remote_port), data])
         except:
             try:
-                data = "".join([struct.pack(">B", 4), socket.inet_pton(socket.AF_INET6, remote_addr), struct.pack(">H", remote_port), data])
+                data = b"".join([struct.pack(">B", 4), socket.inet_pton(socket.AF_INET6, remote_addr), struct.pack(">H", remote_port), data])
             except:
-                data = "".join([struct.pack(">BB", 3, len(remote_port)), remote_addr, struct.pack(">H", remote_port), data])
+                data = b"".join([struct.pack(">BB", 3, len(remote_port)), remote_addr, struct.pack(">H", remote_port), data])
         return crypto.encrypt(data)

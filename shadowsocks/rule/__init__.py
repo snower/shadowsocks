@@ -2,7 +2,7 @@
 #14-6-6
 # create by: snower
 
-from default import rules, load_rule
+from .default import rules, load_rule
 
 
 class Rule(object):
@@ -18,7 +18,7 @@ class Rule(object):
         hosts = self.host.split(".")
         if len(rules) > 2:
             for i in range(len(rules) - 2):
-                host = ".".join(hosts[-(i+2):])
-                if  host in rules:
+                host = b".".join(hosts[-(i+2):])
+                if host in rules:
                     return True
         return False

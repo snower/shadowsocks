@@ -122,7 +122,7 @@ class UdpResponse(object):
     def on_data(self, s, buffer):
         while buffer:
             data, address = buffer.next()
-            data = "".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", address[1]), data])
+            data = b"".join([struct.pack(">H", len(address[0])), address[0], struct.pack(">H", address[1]), data])
             self.request.write(data)
 
     def write(self, buffer):
@@ -166,7 +166,7 @@ class ProxyResponse(object):
     def on_connect(self, s):
         self.is_connected = True
         if self.buffer:
-            self.write("".join(self.buffer))
+            self.write(self.buffer)
 
     def on_data(self, s, data):
         self.connection.write(data)
@@ -192,7 +192,7 @@ class ProxyResponse(object):
             except sevent.errors.SocketClosed:
                 pass
         else:
-            self.buffer.append(str(data))
+            self.buffer = data
         self.send_data_len += len(data)
 
     def end(self):
@@ -352,7 +352,7 @@ class Request(object):
     def parse_addr_info(self,data):
         try:
             addr_len, = struct.unpack('>H',data.read(2))
-            self.remote_addr = data.read(addr_len)
+            self.remote_addr = data.read(addr_len).decode("utf-8")
             self.remote_port, = struct.unpack('>H', data.read(2))
             self.header_length = addr_len + 4
         except Exception as e:
@@ -360,7 +360,7 @@ class Request(object):
             self.end()
             return False
         if self.remote_addr == '0.0.0.0' or not self.remote_port:
-            logging.error("parse addr error: %s %s %s",data,self.remote_addr,self.remote_port)
+            logging.error("parse addr error: %s %s %s", data, self.remote_addr, self.remote_port)
             self.end()
             return False
         return True
@@ -372,7 +372,7 @@ class Request(object):
                 logging.info('udp connecting %s', self.stream)
             else:
                 if self.parse_addr_info(data):
-                    logging.info('connecting %s:%s %s',self.remote_addr, self.remote_port, len(self._requests))
+                    logging.info('connecting %s:%s %s', self.remote_addr, self.remote_port, len(self._requests))
                     self.response = Response(self)
             if data:
                 self.response.write(data)
@@ -384,7 +384,7 @@ class Request(object):
             self.response.end()
         self._requests.remove(self)
         if isinstance(self.response, Response):
-            logging.info('connected %s:%s %s %.3fs %s/%s',self.remote_addr, self.remote_port,len(self._requests),
+            logging.info('connected %s:%s %s %.3fs %s/%s', self.remote_addr, self.remote_port,len(self._requests),
                          time.time()-self.time,
                          format_data_count(self.stream._send_data_len),
                          format_data_count(self.stream._recv_data_len))

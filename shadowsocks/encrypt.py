@@ -38,7 +38,7 @@ def get_table(key):
     s = m.digest()
     (a, b) = struct.unpack('<QQ', s)
     table = [c for c in string.maketrans('', '')]
-    for i in xrange(1, 1024):
+    for i in range(1, 1024):
         table.sort(lambda x, y: int(a % (ord(x) + i) - a % (ord(y) + i)))
     return table
 
@@ -57,7 +57,7 @@ def init_table(key, method=None):
             sys.exit(1)
     if not method:
         global encrypt_table, decrypt_table
-        encrypt_table = ''.join(get_table(key))
+        encrypt_table = b''.join(get_table(key))
         decrypt_table = string.maketrans(encrypt_table, string.maketrans('', ''))
     else:
         try:
@@ -73,7 +73,7 @@ def EVP_BytesToKey(password, key_len, iv_len):
     # TODO: cache the results
     m = []
     i = 0
-    while len(''.join(m)) < (key_len + iv_len):
+    while len(b''.join(m)) < (key_len + iv_len):
         md5 = hashlib.md5()
         data = password
         if i > 0:
@@ -81,7 +81,7 @@ def EVP_BytesToKey(password, key_len, iv_len):
         md5.update(data)
         m.append(md5.digest())
         i += 1
-    ms = ''.join(m)
+    ms = b''.join(m)
     key = ms[:key_len]
     iv = ms[key_len:key_len + iv_len]
     return (key, iv)
@@ -112,7 +112,7 @@ class Encryptor(object):
         self.method = method
         self.iv = None
         self.iv_sent = False
-        self.cipher_iv = ''
+        self.cipher_iv = b''
         self.decipher = None
         if method is not None:
             self.cipher = self.get_cipher(key, method, 1, iv=random_string(32))

@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from __future__ import with_statement
 import os
 os.chdir(os.path.dirname(__file__) or '.')
 import time
@@ -234,7 +233,7 @@ class DnsResponse(object):
         self.conn = None
         self.is_udp = is_udp
         self.use_udp = False
-        self.tcp_rdata = ''
+        self.tcp_rdata = b''
         self.send_data_len = 0
         self.recv_data_len = 0
 
@@ -367,7 +366,7 @@ class DnsResponse(object):
                 client.session(self.on_session)
             if not self.is_udp and not self.use_udp:
                 data = struct.pack("!H", len(data)) + data
-            data = "".join([struct.pack(">H", len(self.proxy_remote_addr)), self.proxy_remote_addr, struct.pack('>H', self.remote_port), data])
+            data = b"".join([struct.pack(">H", len(self.proxy_remote_addr)), self.proxy_remote_addr, struct.pack('>H', self.remote_port), data])
             if self.stream:
                 self.stream.write(data)
             else:
@@ -385,7 +384,7 @@ class DnsResponse(object):
     def parse_addr_info(self, data):
         try:
             addr_len, = struct.unpack('>H', data[:2])
-            remote_addr = data[2: addr_len + 2]
+            remote_addr = data[2: addr_len + 2].decode("utf-8")
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
         except Exception as e:
@@ -467,7 +466,7 @@ class UdpResponse(object):
     def write(self,data):
         if not data:
             return
-        data = "".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr, struct.pack('>H', self.remote_port), data])
+        data = b"".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr.encode("utf-8"), struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
         else:
@@ -482,7 +481,7 @@ class UdpResponse(object):
     def parse_addr_info(self, data):
         try:
             addr_len, = struct.unpack('>H', data[:2])
-            remote_addr = data[2: addr_len + 2]
+            remote_addr = data[2: addr_len + 2].decode("utf-8")
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
         except Exception as e:
@@ -652,7 +651,7 @@ class Request(object):
             self.protocol.parse(data)
         except ProtocolParseEndError as e:
             self.protocol_parse_end = True
-            if e.inet_ut != '\x01':
+            if e.inet_ut != 1:
                 return
 
             if self.protocol.remote_addr.strip() == '0.0.0.0' and not self.protocol.remote_port:
@@ -695,9 +694,9 @@ class Request(object):
                                  len(self._requests))
                     return
 
-            self.response=Response(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-            buffer.write("".join([struct.pack(">H",len(self.protocol.remote_addr)),
-                                         self.protocol.remote_addr,struct.pack('>H',self.protocol.remote_port),
+            self.response = Response(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
+            buffer.write(b"".join([struct.pack(">H",len(self.protocol.remote_addr)),
+                                         self.protocol.remote_addr.encode("utf-8"), struct.pack('>H', self.protocol.remote_port),
                                          e.data]))
             self.response.write(buffer)
 
@@ -718,14 +717,14 @@ class Request(object):
 
         if self.protocol is None:
             data = buffer.read(-1)
-            if data[0] == '\x05':
+            if data[0] == 5:
                 self.protocol = Sock5Protocol(self)
-            elif data[0] == '\x04':
+            elif data[0] == 4:
                 self.protocol = Sock4Protocol(self)
             else:
                 http_data = data[:10]
-                index = http_data.find(' ')
-                if index > 0 and (http_data[:index].lower() == "connect" or http_data[index+1:index+5] == "http"):
+                index = http_data.find(b' ')
+                if index > 0 and (http_data[:index].lower() == b"connect" or http_data[index+1:index+5] == b"http"):
                     self.protocol = HttpProtocol(self)
                 else:
                     self.protocol = RedirectProtocol(self)
