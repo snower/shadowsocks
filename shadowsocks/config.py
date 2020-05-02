@@ -22,7 +22,7 @@ def parse_hosts():
         etc_path = os.environ['WINDIR'] + '/system32/drivers/etc/hosts'
     hosts = []
     try:
-        with open(etc_path, 'rb') as f:
+        with open(etc_path, 'r', encoding="utf-8") as f:
             for line in f.readlines():
                 line = line.strip()
                 if not line or line[0] == '#':
