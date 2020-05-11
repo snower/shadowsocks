@@ -55,6 +55,7 @@ PROXY_ADDR = config.get("proxy_addr")
 PROXY_PORT = config.get("proxy_port", 443)
 SSKEY = config.get("sspassword", KEY)
 SSMETHOD = config.get("ssmethod", METHOD)
+SSPROXYS = set(config.get("ssproxys", []))
 EDNS_CLIENT_SUBNETS = config.get("edns_client_subnets", {
     "8.8.8.8": "119.29.29.29"
 })

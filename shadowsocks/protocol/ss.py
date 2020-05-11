@@ -76,10 +76,12 @@ class Crypto(object):
         return self._decipher.update(buf)
 
 class SSProtocol(Protocol):
-    def __init__(self, *args, **kwargs):
-        super(SSProtocol, self).__init__(*args, **kwargs)
+    def __init__(self, request, address):
+        super(SSProtocol, self).__init__(request)
 
+        self.from_proxy = True if address[0] in config.SSPROXYS else False
         self._crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
+        self.proxy_address = None
 
     def parse_header(self, data):
         addrtype = data[0]
@@ -116,13 +118,28 @@ class SSProtocol(Protocol):
         return addrtype, dest_addr, dest_port, header_length
 
     def parse(self, data):
-        data = self._crypto.decrypt(data)
+        if self.from_proxy and self.proxy_address is None:
+            ip_len = data[0]
+            self.proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
+            data = self._crypto.decrypt(data[ip_len + 3:])
+            self.request.address = self.proxy_address
+        else:
+            data = self._crypto.decrypt(data)
         _, self.remote_addr, self.remote_port, header_length = self.parse_header(data)
         raise ProtocolParseEndError(data[header_length:])
 
-    def unpack_udp(self, data):
+    def unpack_udp(self, data, address):
         crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
-        data = crypto.decrypt(data)
+
+        if address[0] in config.SSPROXYS:
+            ip_len = data[0]
+            proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
+            data = crypto.decrypt(data[ip_len + 3:])
+            self.request.address = self.proxy_address
+        else:
+            proxy_address = None
+            data = crypto.decrypt(data)
+
         addr_type = data[0]
         if addr_type == 1:
             remote_addr = socket.inet_ntoa(data[1:5])
@@ -140,7 +157,7 @@ class SSProtocol(Protocol):
         else:
             raise Exception(data)
         remote_port, = struct.unpack('>H', remote_port)
-        return remote_addr, remote_port, data[header_length:]
+        return remote_addr, remote_port, data[header_length:], proxy_address
 
     def pack_udp(self, remote_addr, remote_port, data):
         crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))

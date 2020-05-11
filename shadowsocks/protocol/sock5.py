@@ -61,7 +61,7 @@ class Sock5Protocol(Protocol):
             raise Exception(data)
         self.remote_port, = struct.unpack('>H', self.remote_port)
 
-    def unpack_udp(self, data):
+    def unpack_udp(self, data, address):
         addr_type = data[3]
         if addr_type == 1:
             remote_addr = socket.inet_ntoa(data[4:8])
@@ -79,7 +79,7 @@ class Sock5Protocol(Protocol):
         else:
             raise Exception(data)
         remote_port, = struct.unpack('>H', remote_port)
-        return remote_addr, remote_port, data[header_length:]
+        return remote_addr, remote_port, data[header_length:], None
 
     def pack_udp(self, remote_addr, remote_port, data):
         try:
