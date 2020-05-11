@@ -678,7 +678,7 @@ class Request(object):
                 return
                 
             if self.protocol.remote_port == 53 and self.protocol.remote_addr in config.EDNS_CLIENT_SUBNETS:
-                self.response = DnsResponse(self, self.address, self.protocol.remote_addr, self.protocol.remote_port, is_udp=False)
+                self.response = DnsResponse(self, self.address, self.protocol.remote_addr, self.protocol.remote_port, self.address, is_udp=False)
                 if e.data:
                     buffer.write(e.data)
                     self.response.write(buffer)
