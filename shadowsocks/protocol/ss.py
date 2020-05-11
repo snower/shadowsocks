@@ -135,7 +135,6 @@ class SSProtocol(Protocol):
             ip_len = data[0]
             proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
             data = crypto.decrypt(data[ip_len + 3:])
-            self.request.address = self.proxy_address
         else:
             proxy_address = None
             data = crypto.decrypt(data)
