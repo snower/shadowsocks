@@ -79,7 +79,7 @@ class SSProtocol(Protocol):
     def __init__(self, request, address):
         super(SSProtocol, self).__init__(request)
 
-        self.from_proxy = True if address[0] in config.SSPROXYS else False
+        self.from_proxy = True if address and address[0] in config.SSPROXYS else False
         self._crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         self.proxy_address = None
 

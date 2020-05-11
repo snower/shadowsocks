@@ -840,7 +840,7 @@ if __name__ == '__main__':
         ss_udp_server = sevent.udp.Server()
 
         udp_request = UdpRequest(udp_server, Sock5Protocol(None))
-        ss_udp_request = UdpRequest(ss_udp_server, SSProtocol(None))
+        ss_udp_request = UdpRequest(ss_udp_server, SSProtocol(None, None))
 
         client.on('session', Request.on_session)
 
