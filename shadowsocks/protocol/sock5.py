@@ -79,7 +79,7 @@ class Sock5Protocol(Protocol):
         else:
             raise Exception(data)
         remote_port, = struct.unpack('>H', remote_port)
-        return remote_addr, remote_port, data[header_length:], None
+        return remote_addr, remote_port, data[header_length:], address
 
     def pack_udp(self, remote_addr, remote_port, data):
         try:

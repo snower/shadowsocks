@@ -121,8 +121,10 @@ class SSProtocol(Protocol):
         if self.from_proxy and self.proxy_address is None:
             ip_len = data[0]
             self.proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
-            data = self._crypto.decrypt(data[ip_len + 3:])
             self.request.address = self.proxy_address
+            if ip_len + 3 >= len(data):
+                return
+            data = self._crypto.decrypt(data[ip_len + 3:])
         else:
             data = self._crypto.decrypt(data)
         _, self.remote_addr, self.remote_port, header_length = self.parse_header(data)
@@ -134,9 +136,11 @@ class SSProtocol(Protocol):
         if address[0] in config.SSPROXYS:
             ip_len = data[0]
             proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
+            if ip_len + 3 >= len(data):
+                raise Exception(data)
             data = crypto.decrypt(data[ip_len + 3:])
         else:
-            proxy_address = None
+            proxy_address = address
             data = crypto.decrypt(data)
 
         addr_type = data[0]
