@@ -825,7 +825,7 @@ if __name__ == '__main__':
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = sevent.instance()
-        client = Client(config.SERVER, config.REMOTE_PORT, 3, config.KEY, config.METHOD.replace("-", "_"))
+        client = Client(config.SERVER, config.REMOTE_PORT, 3, config.KEY, config.METHOD.replace("-", "_"), config.SESSION_ID)
         server = sevent.tcp.Server()
         ss_server = sevent.tcp.Server()
 

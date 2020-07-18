@@ -9,7 +9,7 @@ import getopt
 import logging
 
 optlist, args = getopt.getopt(sys.argv[1:], 'c:s:p:k:b:l:m:v')
-config_file=dict(optlist)['-c'] if '-c' in dict(optlist) else 'config.json'
+config_file = dict(optlist)['-c'] if '-c' in dict(optlist) else 'config.json'
 try:
     with open(config_file, 'rb') as f:
         config = json.load(f)
@@ -38,14 +38,16 @@ def parse_hosts():
     except IOError:
         return hosts
 
+
 SERVER = config.get('server', "127.0.0.1")
 REMOTE_PORT = config.get('server_port', 443)
-BIND_ADDR=config.get("bind_addr","0.0.0.0")
+BIND_ADDR = config.get("bind_addr", "0.0.0.0")
 PORT = config.get('local_port', 1099)
 SSPORT = config.get("sslocal_port", PORT+1)
 KEY = config.get('password', '')
 METHOD = config.get('method', None)
-TIME_OUT=config.get("time_out",60)
+SESSION_ID = config.get("session_id", 0)
+TIME_OUT = config.get("time_out", 60)
 LOG_LEVEL = logging.INFO
 MAX_CONNECTIONS = int(config.get("max_connections", 10))
 USE_RULE = bool(config.get("use_rule", False))
@@ -65,7 +67,7 @@ for key, value in optlist:
         REMOTE_PORT = int(value)
     elif key == '-k':
         KEY = value
-    elif KEY=='-b':
+    elif KEY == '-b':
         BIND_ADDR=value
     elif key == '-l':
         PORT = int(value)
