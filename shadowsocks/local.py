@@ -129,6 +129,8 @@ class UdpPassResponse(object):
             return
         if not self.conn:
             self.conn = sevent.udp.Socket()
+            if self.remote_addr and self.remote_addr[0] == "255.255.255.255":
+                self.conn.enable_broadcast()
             self.conn.on("data", self.on_data)
             self.conn.on("close", self.on_close)
 
