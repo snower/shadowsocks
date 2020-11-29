@@ -640,7 +640,7 @@ class Request(object):
 
             if not self.protocol or not self.protocol_parse_end:
                 return self.end()
-        loop.add_timeout(0.5, on_timeout)
+        loop.add_timeout(15, on_timeout)
 
     @classmethod
     def on_data_timeout(cls):
