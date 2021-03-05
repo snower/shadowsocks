@@ -364,7 +364,6 @@ class DnsResponse(object):
                     continue
                 self.use_udp = True
             except Exception as e:
-                logging.error(traceback.format_exc())
                 logging.info("parse dns error:%s", e)
 
             if self.stream is None:
@@ -713,8 +712,8 @@ class Request(object):
                          self.address[0], self.address[1],
                          self.response.remote_addr,self.response.remote_port,
                          len(self._requests))
-        except:
-            logging.error(traceback.format_exc())
+        except Exception as e:
+            logging.error(e)
             self.end()
 
     def on_data(self, s, buffer):
