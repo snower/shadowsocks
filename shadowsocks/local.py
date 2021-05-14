@@ -22,6 +22,7 @@
 
 import os
 os.chdir(os.path.dirname(__file__) or '.')
+
 import time
 import struct
 import traceback
@@ -30,16 +31,18 @@ import sevent
 import logging
 import socket
 import dnslib
-from utils import format_data_count
-from protocol import ProtocolParseEndError
-from protocol.http import HttpProtocol
-from protocol.sock4 import Sock4Protocol
-from protocol.sock5 import Sock5Protocol
-from protocol.redirect import RedirectProtocol
-from protocol.ss import SSProtocol
 from xstream.client import Client
-from rule import Rule
-import config
+
+from .protocol import ProtocolParseEndError
+from .protocol.http import HttpProtocol
+from .protocol.sock4 import Sock4Protocol
+from .protocol.sock5 import Sock5Protocol
+from .protocol.redirect import RedirectProtocol
+from .protocol.ss import SSProtocol
+from .rule import Rule
+from .utils import format_data_count
+from .cache import FileBuffer
+from . import config
 
 class PassResponse(object):
     def __init__(self, request, protocol, remote_addr, remote_port):
@@ -49,7 +52,7 @@ class PassResponse(object):
         self.remote_port = remote_port
         self.is_connected=False
         self.buffer = None
-        self.time=time.time()
+        self.time = time.time()
         self.send_data_len = 0
         self.recv_data_len = 0
 
@@ -63,7 +66,7 @@ class PassResponse(object):
         self.conn.connect((self.request.protocol.remote_addr, self.request.protocol.remote_port), 30)
 
     def on_connect(self, s):
-        self.is_connected=True
+        self.is_connected = True
         rbuffer, wbuffer = self.conn.buffer
         wbuffer.link(self.request.rbuffer)
         self.request.wbuffer.link(rbuffer)
@@ -370,7 +373,9 @@ class DnsResponse(object):
                 client.session(self.on_session)
             if not self.is_udp and not self.use_udp:
                 data = struct.pack("!H", len(data)) + data
-            data = b"".join([struct.pack(">H", len(self.proxy_remote_addr)), self.proxy_remote_addr.encode("utf-8"), struct.pack('>H', self.remote_port), data])
+            data = b"".join([struct.pack(">H", len(self.proxy_remote_addr)),
+                             self.proxy_remote_addr.encode("utf-8"),
+                             struct.pack('>H', self.remote_port), data])
             if self.stream:
                 self.stream.write(data)
             else:
@@ -408,9 +413,11 @@ class DnsResponse(object):
 
         if opt_rr is None:
             try:
-                client_subnet = dnslib.EDNSOption(8, struct.pack("!HH4s", 0x0001, 0x2000, socket.inet_aton(client_id)))
+                client_subnet = dnslib.EDNSOption(8, struct.pack("!HH4s", 0x0001, 0x2000,
+                                                                 socket.inet_aton(client_id)))
             except socket.error:
-                client_subnet = dnslib.EDNSOption(8, struct.pack("!HH16s", 0x0002, 0x2000, socket.inet_pton(socket.AF_INET6, client_id)))
+                client_subnet = dnslib.EDNSOption(8, struct.pack("!HH16s", 0x0002, 0x2000,
+                                                                 socket.inet_pton(socket.AF_INET6, client_id)))
             opt_rr = dnslib.RR(dnslib.DNSLabel(None), 41, 4096, 0, [client_subnet])
             dns_record.add_ar(opt_rr)
             logging.info("dns edns_client_subnet %s", client_id)
@@ -423,9 +430,11 @@ class DnsResponse(object):
 
             if not client_subnet:
                 try:
-                    client_subnet = dnslib.EDNSOption(8, struct.pack("!HH4s", 0x0001, 0x2000, socket.inet_aton(client_id)))
+                    client_subnet = dnslib.EDNSOption(8, struct.pack("!HH4s", 0x0001, 0x2000,
+                                                                     socket.inet_aton(client_id)))
                 except socket.error:
-                    client_subnet = dnslib.EDNSOption(8, struct.pack("!HH16s", 0x0002, 0x2000, socket.inet_pton(socket.AF_INET6, client_id)))
+                    client_subnet = dnslib.EDNSOption(8, struct.pack("!HH16s", 0x0002, 0x2000,
+                                                                     socket.inet_pton(socket.AF_INET6, client_id)))
                 opt_rr.rdata.append(client_subnet)
                 logging.info("dns edns_client_subnet %s", client_id)
         return dns_record
@@ -443,7 +452,7 @@ class UdpResponse(object):
         self.proxy_address = proxy_address
         self.remote_addr = remote_addr
         self.remote_port = remote_port
-        self.time=time.time()
+        self.time = time.time()
         self.stream = None
         self.buffer = []
 
@@ -471,7 +480,8 @@ class UdpResponse(object):
     def write(self,data):
         if not data:
             return
-        data = b"".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr.encode("utf-8"), struct.pack('>H', self.remote_port), data])
+        data = b"".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr.encode("utf-8"),
+                         struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
         else:
@@ -500,7 +510,7 @@ class UdpResponse(object):
         return self.stream._recv_data_len if self.stream else 0
 
 class UdpRequest(object):
-    caches= {}
+    caches = {}
 
     def __init__(self, server, protocol):
         self.protocol = protocol
@@ -527,25 +537,37 @@ class UdpRequest(object):
             if address not in self.caches:
                 if (config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK)) \
                         or remote_addr in config.LOCAL_HOSTS:
-                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port, proxy_address)
-                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0], proxy_address[1], remote_addr, remote_port, len(self.caches))
+                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
+                                                                                proxy_address)
+                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                                 proxy_address[1], remote_addr, remote_port, len(self.caches))
                 elif remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
-                    response = self.__class__.caches[address] = DnsResponse(self, address, remote_addr, remote_port, proxy_address)
-                    logging.info('%s udp connecting by dns %s:%s -> %s:%s %d', self.protocol, proxy_address[0], proxy_address[1], remote_addr, remote_port, len(self.caches))
+                    response = self.__class__.caches[address] = DnsResponse(self, address, remote_addr, remote_port,
+                                                                            proxy_address)
+                    logging.info('%s udp connecting by dns %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                                 proxy_address[1], remote_addr, remote_port, len(self.caches))
                 elif isinstance(self.protocol, SSProtocol) and remote_port != 443:
-                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port, proxy_address)
-                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0], proxy_address[1], remote_addr, remote_port, len(self.caches))
+                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
+                                                                                proxy_address)
+                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                                 proxy_address[1], remote_addr, remote_port, len(self.caches))
                 elif config.USE_RULE:
                     rule = Rule(self.protocol.remote_addr)
                     if not rule.check():
-                        response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port, proxy_address)
-                        logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0], proxy_address[1], remote_addr, remote_port, len(self.caches))
+                        response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr,
+                                                                                    remote_port, proxy_address)
+                        logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                                     proxy_address[1], remote_addr, remote_port, len(self.caches))
                     else:
-                        response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port, proxy_address)
-                        logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0], proxy_address[1], remote_addr, remote_port, len(self.caches))
+                        response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port,
+                                                                                proxy_address)
+                        logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                                     proxy_address[1], remote_addr, remote_port, len(self.caches))
                 else:
-                    response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port, proxy_address)
-                    logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0], proxy_address[1], remote_addr, remote_port, len(self.caches))
+                    response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port,
+                                                                            proxy_address)
+                    logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                                 proxy_address[1], remote_addr, remote_port, len(self.caches))
             else:
                 response = self.caches[address]
             response.write(data)
@@ -578,26 +600,59 @@ class Response(object):
         self.protocol = protocol
         self.remote_addr = remote_addr
         self.remote_port = remote_port
-        self.time=time.time()
+        self.time = time.time()
+        self.is_ended = False
         self.stream = None
         self.buffer = None
+        self.file_buffer = None
+        client.session(self.on_session)
 
-        def on_session(client, session):
-            self.stream = session.stream()
-            self.stream.on('data', self.on_data)
-            self.stream.on('close', self.on_close)
-            rbuffer, wbuffer = self.stream.buffer
-            wbuffer.link(self.request.rbuffer)
-            self.request.wbuffer.link(rbuffer)
-            if self.buffer:
-                self.write(self.buffer)
-        client.session(on_session)
+    def on_session(self, client, session):
+        self.stream = session.stream()
+        self.stream.on('data', self.on_data)
+        self.stream.on('close', self.on_close)
+
+        self.request.wbuffer.on("drain", self.on_drain)
+        self.request.wbuffer.on("regain", self.on_regain)
+        if self.buffer:
+            self.write(self.buffer)
+
+    def on_drain(self, buffer):
+        if self.file_buffer is False or self.file_buffer:
+            return
+
+        self.file_buffer = FileBuffer()
+        try:
+            self.file_buffer.open()
+        except Exception as e:
+            logging.error("open filebuffer error: %s", e)
+            self.file_buffer = False
+
+    def on_regain(self, buffer):
+        if self.file_buffer.wlen > self.file_buffer.rlen:
+            wlen = self.request.wbuffer._drain_size - len(self.request.wbuffer) + 16
+            self.request.write(self.file_buffer.read(wlen))
+
+        if self.file_buffer.wlen <= self.file_buffer.rlen and self.is_ended:
+            self.request.end()
 
     def on_data(self, s, data):
-        self.request.write(data)
+        if not self.file_buffer:
+            return self.request.write(data)
+
+        if self.request.wbuffer.full:
+            return self.file_buffer.write(data.read())
+
+        if self.file_buffer.wlen > self.file_buffer.rlen:
+            self.file_buffer.write(data.read())
+            wlen = self.request.wbuffer._drain_size - len(self.request.wbuffer) + 16
+            return self.request.write(self.file_buffer.read(wlen))
+        return self.request.write(data)
 
     def on_close(self, s):
-        self.request.end()
+        if not self.file_buffer:
+            self.request.end()
+        self.is_ended = True
 
     def write(self, data):
         if self.stream:
@@ -608,6 +663,9 @@ class Response(object):
     def end(self):
         if self.stream:
             self.stream.close()
+        if self.file_buffer:
+            self.file_buffer.close()
+            self.file_buffer = None
 
     def get_send_data_len(self):
         return self.stream._send_data_len if self.stream else 0
@@ -616,17 +674,17 @@ class Response(object):
         return self.stream._recv_data_len if self.stream else 0
 
 class Request(object):
-    _requests=[]
+    _requests = []
 
     def __init__(self, conn):
         self.conn = conn
         self.address = conn.address
         self.response = None
-        self.protocol=None
-        self.protocol_parse_end=False
-        self.time=time.time()
-        self.data_time=time.time()
-        self.closed=False
+        self.protocol = None
+        self.protocol_parse_end = False
+        self.time = time.time()
+        self.data_time = time.time()
+        self.closed = False
         self.rbuffer, self.wbuffer = conn.buffer
 
         conn.on('data', self.on_data)
@@ -668,7 +726,8 @@ class Request(object):
 
             if (config.LOCAL_NETWORK and self.protocol.remote_addr.startswith(config.LOCAL_NETWORK)) \
                     or self.protocol.remote_addr in config.LOCAL_HOSTS:
-                self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
+                self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
+                                             self.protocol.remote_port)
                 if e.data:
                     buffer.write(e.data)
                     self.response.write(buffer)
@@ -679,7 +738,8 @@ class Request(object):
                 return
                 
             if self.protocol.remote_port == 53 and self.protocol.remote_addr in config.EDNS_CLIENT_SUBNETS:
-                self.response = DnsResponse(self, self.address, self.protocol.remote_addr, self.protocol.remote_port, self.address, is_udp=False)
+                self.response = DnsResponse(self, self.address, self.protocol.remote_addr,
+                                            self.protocol.remote_port, self.address, is_udp=False)
                 if e.data:
                     buffer.write(e.data)
                     self.response.write(buffer)
@@ -692,7 +752,8 @@ class Request(object):
             if config.USE_RULE:
                 rule = Rule(self.protocol.remote_addr)
                 if  not rule.check():
-                    self.response = PassResponse(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
+                    self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
+                                                 self.protocol.remote_port)
                     if e.data:
                         buffer.write(e.data)
                         self.response.write(buffer)
@@ -703,14 +764,14 @@ class Request(object):
                     return
 
             self.response = Response(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-            buffer.write(b"".join([struct.pack(">H",len(self.protocol.remote_addr)),
-                                         self.protocol.remote_addr.encode("utf-8"), struct.pack('>H', self.protocol.remote_port),
-                                         e.data]))
+            buffer.write(b"".join([struct.pack(">H", len(self.protocol.remote_addr)),
+                                   self.protocol.remote_addr.encode("utf-8"),
+                                   struct.pack('>H', self.protocol.remote_port), e.data]))
             self.response.write(buffer)
 
             logging.info('%s connecting by proxy %s:%s -> %s:%s %s',self.protocol,
                          self.address[0], self.address[1],
-                         self.response.remote_addr,self.response.remote_port,
+                         self.response.remote_addr, self.response.remote_port,
                          len(self._requests))
         except Exception as e:
             logging.error(e)
@@ -752,7 +813,7 @@ class Request(object):
                      self.address[0], self.address[1],
                      self.response.remote_addr if self.response else (self.protocol.remote_addr if self.protocol else ''),
                      self.response.remote_port if self.response else (self.protocol.remote_port if self.protocol else ''),
-                     len(self._requests),time.time()-self.time,
+                     len(self._requests), time.time()-self.time,
                      format_data_count(self.response.get_send_data_len() if self.response else 0),
                      format_data_count(self.response.get_recv_data_len() if self.response else 0))
         self.response = None
@@ -787,12 +848,11 @@ class SSRequest(Request):
     def __init__(self, conn):
         super(SSRequest, self).__init__(conn)
 
-        self.rbuffer = sevent.Buffer()
-        self.wbuffer = sevent.Buffer()
+        self.fastrbuffer = sevent.Buffer()
+        self.fastwbuffer = sevent.Buffer()
 
-        rbuffer, wbuffer = conn.buffer
-        self.rbuffer.link(rbuffer)
-        wbuffer.link(self.wbuffer)
+        self.fastrbuffer.link(self.rbuffer)
+        self.rbuffer = self.fastrbuffer
 
     def on_data(self, s, buffer):
         self.data_time = time.time()
@@ -815,10 +875,10 @@ class SSRequest(Request):
 
         if data.__class__ == sevent.Buffer:
             while data:
-                self.wbuffer.write(self.protocol._crypto.encrypt(data.next()))
+                self.fastwbuffer.write(self.protocol._crypto.encrypt(data.next()))
         else:
-            self.wbuffer.write(self.protocol._crypto.encrypt(data))
-        self.conn.write(self.wbuffer)
+            self.fastwbuffer.write(self.protocol._crypto.encrypt(data))
+        self.conn.write(self.fastwbuffer)
         self.data_time = time.time()
 
 if __name__ == '__main__':
@@ -826,7 +886,8 @@ if __name__ == '__main__':
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = sevent.instance()
-        client = Client(config.SERVER, config.REMOTE_PORT, 3, config.KEY, config.METHOD.replace("-", "_"), config.SESSION_ID)
+        client = Client(config.SERVER, config.REMOTE_PORT, 3, config.KEY,
+                        config.METHOD.replace("-", "_"), config.SESSION_ID)
         server = sevent.tcp.Server()
         ss_server = sevent.tcp.Server()
 

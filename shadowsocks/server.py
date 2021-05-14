@@ -23,14 +23,17 @@
 from __future__ import with_statement
 import os
 os.chdir(os.path.dirname(__file__) or '.')
+
 from collections import deque, defaultdict
 import time
 import struct
 import logging
 import sevent
 from xstream.server import Server
-from utils import format_data_count
-import config
+
+from .utils import format_data_count
+from .cache import FileBuffer
+from . import config
 
 class DnsSocket(sevent.udp.Socket):
     _cache = defaultdict(deque)
@@ -117,12 +120,13 @@ class UdpResponse(object):
             return (remote_addr, remote_port), data[addr_len + 4:]
         except Exception as e:
             logging.error("parse addr error: %s %s", e, data)
-            return  None, ''
+            return None, ''
 
     def on_data(self, s, buffer):
         while buffer:
             data, address = buffer.next()
-            data = b"".join([struct.pack(">H", len(address[0])), address[0].encode("utf-8"), struct.pack(">H", address[1]), data])
+            data = b"".join([struct.pack(">H", len(address[0])), address[0].encode("utf-8"),
+                             struct.pack(">H", address[1]), data])
             self.request.write(data)
 
     def write(self, buffer):
@@ -198,57 +202,6 @@ class ProxyResponse(object):
     def end(self):
         self.proxy_connection.end()
 
-class FileBuffer(object):
-    cache_path = None
-
-    def __init__(self):
-        self.filename = None
-        self.rlen = 0
-        self.wlen = 0
-        self.fp = None
-
-    def open(self):
-        cache_path = self.init_dir()
-        self.filename = cache_path + os.path.sep + struct.pack("!Q", int(id(self))).encode("hex")
-        self.fp = open(self.filename, 'wb+')
-
-    def init_dir(self):
-        if self.cache_path:
-            return self.cache_path
-
-        cache_path = os.environ.get("CACHE_PATH")
-        if cache_path:
-            self.__class__.cache_path = os.path.abspath(cache_path)
-        else:
-            self.__class__.cache_path = os.path.abspath("./cache")
-        if not os.path.exists(self.__class__.cache_path):
-            os.mkdir(self.__class__.cache_path)
-        return self.__class__.cache_path
-
-    def write(self, data):
-        self.fp.seek(0, os.SEEK_END)
-        self.fp.write(data)
-        self.wlen += len(data)
-
-    def read(self, size = -1):
-        if self.rlen >= self.wlen:
-            return ''
-
-        self.fp.seek(self.rlen, os.SEEK_SET)
-        if size < 0:
-            size = self.wlen - self.rlen
-        else:
-            size = min(size, self.wlen - self.rlen)
-        self.rlen += size
-        return self.fp.read(size)
-
-    def close(self):
-        self.fp.close()
-        try:
-            os.remove(self.filename)
-        except:
-            logging.info("remove filename error: %s", self.filename)
-
 class Response(object):
     def __init__(self, request):
         self.conn = sevent.tcp.Socket()
@@ -257,7 +210,7 @@ class Response(object):
         self.is_ended = False
         self.buffer = None
         self.file_buffer = None
-        self.time=time.time()
+        self.time = time.time()
 
         if self.request.remote_port == 53:
             self.conn.enable_fast_open()
@@ -336,27 +289,28 @@ class Response(object):
             self.file_buffer = None
 
 class Request(object):
-    _requests=[]
+    _requests = []
+
     def __init__(self, stream):
-        self.stream=stream
+        self.stream = stream
         self.remote_addr = ''
         self.remote_port = 0
-        self.header_length=0
+        self.header_length = 0
         self.response = None
-        self.time=time.time()
+        self.time = time.time()
         self.rbuffer, self.wbuffer = stream.buffer
 
         self.stream.on('data', self.on_data)
         self.stream.on('close', self.on_close)
 
-    def parse_addr_info(self,data):
+    def parse_addr_info(self, data):
         try:
-            addr_len, = struct.unpack('>H',data.read(2))
+            addr_len, = struct.unpack('>H', data.read(2))
             self.remote_addr = data.read(addr_len).decode("utf-8")
             self.remote_port, = struct.unpack('>H', data.read(2))
             self.header_length = addr_len + 4
         except Exception as e:
-            logging.error("parse addr error: %s %s",e,data)
+            logging.error("parse addr error: %s %s", e, data)
             self.end()
             return False
         if self.remote_addr == '0.0.0.0' or not self.remote_port:
@@ -416,7 +370,8 @@ class Request(object):
     def on_connection(server, connection, data):
         p = ProxyResponse(connection)
         def on_close(connection):
-            logging.info("server %s proxy connection %s close %s %s %s %s", server, connection, config.PROXY_ADDR, config.PROXY_PORT,
+            logging.info("server %s proxy connection %s close %s %s %s %s", server, connection,
+                         config.PROXY_ADDR, config.PROXY_PORT,
                          format_data_count(p.send_data_len), format_data_count(p.recv_data_len))
         connection.on("close", on_close)
         p.write(data)
