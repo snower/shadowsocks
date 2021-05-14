@@ -33,16 +33,16 @@ import socket
 import dnslib
 from xstream.client import Client
 
-from .protocol import ProtocolParseEndError
-from .protocol.http import HttpProtocol
-from .protocol.sock4 import Sock4Protocol
-from .protocol.sock5 import Sock5Protocol
-from .protocol.redirect import RedirectProtocol
-from .protocol.ss import SSProtocol
-from .rule import Rule
-from .utils import format_data_count
-from .cache import FileBuffer
-from . import config
+from protocol import ProtocolParseEndError
+from protocol.http import HttpProtocol
+from protocol.sock4 import Sock4Protocol
+from protocol.sock5 import Sock5Protocol
+from protocol.redirect import RedirectProtocol
+from protocol.ss import SSProtocol
+from rule import Rule
+from utils import format_data_count
+from cache import FileBuffer
+import config
 
 class PassResponse(object):
     def __init__(self, request, protocol, remote_addr, remote_port):

@@ -31,9 +31,9 @@ import logging
 import sevent
 from xstream.server import Server
 
-from .utils import format_data_count
-from .cache import FileBuffer
-from . import config
+from utils import format_data_count
+from cache import FileBuffer
+import config
 
 class DnsSocket(sevent.udp.Socket):
     _cache = defaultdict(deque)
