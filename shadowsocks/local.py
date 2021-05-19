@@ -50,7 +50,7 @@ class PassResponse(object):
         self.protocol = protocol
         self.remote_addr = remote_addr
         self.remote_port = remote_port
-        self.is_connected=False
+        self.is_connected = False
         self.buffer = None
         self.time = time.time()
         self.send_data_len = 0
@@ -94,7 +94,7 @@ class PassResponse(object):
             self.buffer = data
 
     def end(self):
-        self.conn.close()
+        self.conn.end()
 
     def get_send_data_len(self):
         return self.send_data_len
