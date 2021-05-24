@@ -147,7 +147,7 @@ class UdpPassResponse(object):
 
     def end(self):
         if self.conn:
-            self.conn.close()
+            self.conn.end()
             self.conn = None
         self.request.end(self.address)
 
@@ -324,8 +324,7 @@ class DnsResponse(object):
             host = str(dns_record.questions[0].qname)
             if host[-1] == ".":
                 host = host[:-1]
-            rule = Rule(host)
-            if not rule.check():
+            if not check_host(host):
                 if self.conn is None:
                     self.conn = DnsSocket.instance(self.direct_remote_addr)
                     self.conn.on_data(self.on_udp_data)
