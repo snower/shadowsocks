@@ -27,6 +27,7 @@ os.chdir(os.path.dirname(__file__) or '.')
 from collections import deque, defaultdict
 import time
 import struct
+import signal
 import logging
 import sevent
 from xstream.server import Server
@@ -378,6 +379,9 @@ class Request(object):
         logging.info("server %s proxy connection %s to %s %s", server, connection, config.PROXY_ADDR, config.PROXY_PORT)
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, lambda signum, frame: sevent.current().stop())
+    signal.signal(signal.SIGTERM, lambda signum, frame: sevent.current().stop())
+
     logging.info('shadowsocks v2.0')
     try:
         logging.info("starting server at port %d ..." % config.PORT)

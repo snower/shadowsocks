@@ -30,6 +30,7 @@ class Sock4Protocol(Protocol):
         raise Exception("sock4 unknown cmd %s", cmd)
 
     def parse_addr_info(self, data):
+        self.remote_type = 1
         self.remote_port, = struct.unpack('>H', data[2:4])
         self.remote_addr = socket.inet_ntoa(data[4:8])
         if self.remote_addr[:6] == "0.0.0.":

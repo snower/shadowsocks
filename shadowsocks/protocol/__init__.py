@@ -11,6 +11,7 @@ class ProtocolParseEndError(Exception):
 class Protocol(object):
     def __init__(self, request):
         self.request = request
+        self.remote_type = 0
         self.remote_addr = ''
         self.remote_port = 0
 

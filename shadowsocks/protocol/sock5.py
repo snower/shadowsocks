@@ -45,15 +45,18 @@ class Sock5Protocol(Protocol):
     def parse_addr_info(self,data):
         addr_type = data[3]
         if addr_type == 1:
+            self.remote_type = 1
             self.remote_addr = socket.inet_ntoa(data[4:8])
             self.remote_port = data[8:10]
             self.header_length = 10
         elif addr_type == 4:
+            self.remote_type = 4
             self.remote_addr = socket.inet_ntop(socket.AF_INET6, data[4:20])
             self.remote_port = data[20:22]
             self.header_length = 22
         elif addr_type == 3:
             addr_len = data[4]
+            self.remote_type = 3
             self.remote_addr = data[5:5 + addr_len].decode("utf-8")
             self.remote_port = data[5 + addr_len:5 + addr_len + 2]
             self.header_length = 5 + addr_len + 2
@@ -79,7 +82,7 @@ class Sock5Protocol(Protocol):
         else:
             raise Exception(data)
         remote_port, = struct.unpack('>H', remote_port)
-        return remote_addr, remote_port, data[header_length:], address
+        return addr_type, remote_addr, remote_port, data[header_length:], address
 
     def pack_udp(self, remote_addr, remote_port, data):
         try:

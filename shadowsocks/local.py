@@ -25,6 +25,7 @@ os.chdir(os.path.dirname(__file__) or '.')
 
 import time
 import struct
+import signal
 import traceback
 from collections import defaultdict, deque
 import sevent
@@ -39,7 +40,7 @@ from protocol.sock4 import Sock4Protocol
 from protocol.sock5 import Sock5Protocol
 from protocol.redirect import RedirectProtocol
 from protocol.ss import SSProtocol
-from rule import Rule
+from rule import check_host, check_ip, reload_rule
 from utils import format_data_count
 from cache import FileBuffer
 import config
@@ -533,10 +534,9 @@ class UdpRequest(object):
     def on_data(self, s, buffer):
         while buffer:
             data, address = buffer.next()
-            remote_addr, remote_port, data, proxy_address = self.protocol.unpack_udp(data, address)
+            remote_type, remote_addr, remote_port, data, proxy_address = self.protocol.unpack_udp(data, address)
             if address not in self.caches:
-                if (config.LOCAL_NETWORK and remote_addr.startswith(config.LOCAL_NETWORK)) \
-                        or remote_addr in config.LOCAL_HOSTS:
+                if remote_addr in config.LOCAL_HOSTS or (remote_type == 1 and check_ip(remote_addr)):
                     response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
                                                                                 proxy_address)
                     logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
@@ -552,8 +552,7 @@ class UdpRequest(object):
                     logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
                                  proxy_address[1], remote_addr, remote_port, len(self.caches))
                 elif config.USE_RULE:
-                    rule = Rule(self.protocol.remote_addr)
-                    if not rule.check():
+                    if not check_host(self.protocol.remote_addr):
                         response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr,
                                                                                     remote_port, proxy_address)
                         logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
@@ -724,8 +723,8 @@ class Request(object):
                 raise Exception("adder is empty %:%", self.protocol.remote_addr, self.protocol.remote_port)
 
 
-            if (config.LOCAL_NETWORK and self.protocol.remote_addr.startswith(config.LOCAL_NETWORK)) \
-                    or self.protocol.remote_addr in config.LOCAL_HOSTS:
+            if self.protocol.remote_addr in config.LOCAL_HOSTS or \
+                    (self.protocol.remote_type == 1 and check_ip(self.protocol.remote_addr)):
                 self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
                                              self.protocol.remote_port)
                 if e.data:
@@ -750,8 +749,7 @@ class Request(object):
                 return
 
             if config.USE_RULE:
-                rule = Rule(self.protocol.remote_addr)
-                if  not rule.check():
+                if not check_host(self.protocol.remote_addr):
                     self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
                                                  self.protocol.remote_port)
                     if e.data:
@@ -882,6 +880,10 @@ class SSRequest(Request):
         self.data_time = time.time()
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGHUP, lambda signum, frame: sevent.current().add_async(reload_rule))
+    signal.signal(signal.SIGINT, lambda signum, frame: sevent.current().stop())
+    signal.signal(signal.SIGTERM, lambda signum, frame: sevent.current().stop())
+
     logging.info('shadowsocks v2.0')
     try:
         logging.info("starting server at port %d ..." % config.PORT)

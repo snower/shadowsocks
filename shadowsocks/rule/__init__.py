@@ -2,23 +2,37 @@
 #14-6-6
 # create by: snower
 
-from .default import rules, load_rule
+import struct
+import socket
+import logging
+from .default import rules, load_rule, networks, masks, load_networks
 
+def check_host(host):
+    if host in rules:
+        return True
 
-class Rule(object):
-    def __init__(self, host):
-        self.host = host
+    hosts = host.split(".")
+    if len(rules) > 2:
+        for i in range(len(rules) - 2):
+            host = ".".join(hosts[-(i+2):])
+            if host in rules:
+                return True
+    return False
 
-    def check(self):
-        load_rule()
-
-        if self.host in rules:
-            return True
-
-        hosts = self.host.split(".")
-        if len(rules) > 2:
-            for i in range(len(rules) - 2):
-                host = ".".join(hosts[-(i+2):])
-                if host in rules:
-                    return True
+def check_ip(ip):
+    try:
+        ip = struct.unpack(">I", socket.inet_aton(ip))[0]
+        for mask in masks:
+            network = ip >> (32 - mask)
+            if network not in networks[mask]:
+                return False
+            if networks[mask][network]:
+                return True
+    except:
         return False
+    return False
+
+def reload_rule():
+    load_rule()
+    load_networks()
+    logging.info("reload rule success %s %s %s", len(rules), len(networks), len(masks))

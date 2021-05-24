@@ -2,7 +2,9 @@
 # 2014/8/24
 # create by: snower
 
-import time
+import struct
+from collections import defaultdict
+import socket
 import json
 
 default_rules = {
@@ -19,14 +21,10 @@ default_rules = {
 }
 
 rules = set([])
-
-loaded_time = 0
+networks = defaultdict(dict)
+masks = []
 
 def load_rule():
-    global  loaded_time
-    if time.time() - loaded_time < 24 * 60 * 60:
-        return
-
     rules.clear()
     rules.update(default_rules)
     try:
@@ -45,4 +43,36 @@ def load_rule():
     except:
         pass
 
-    loaded_time = time.time()
+def load_networks():
+    global networks, masks
+    networks, masks = defaultdict(dict), []
+    try:
+        try:
+            with open("china_ip_list.txt") as fp:
+                for line in fp:
+                    info = line.strip().split("/")
+                    mask = int(info[1]) if len(info) >= 2 else 32
+                    network = struct.unpack(">I", socket.inet_aton(info[0]))[0] >> (32 - mask)
+                    networks[mask][network] = True
+        except:
+            pass
+
+        for line in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"):
+            info = line.strip().split("/")
+            mask = int(info[1]) if len(info) >= 2 else 32
+            network = struct.unpack(">I", socket.inet_aton(info[0]))[0] >> (32 - mask)
+            networks[mask][network] = True
+
+        masks = sorted(networks.keys())
+        for i in range(len(masks)):
+            for j in range(i + 1, len(masks)):
+                for network in networks[masks[j]]:
+                    network = network >> (masks[j] - masks[i])
+                    if network in networks[masks[i]]:
+                        continue
+                    networks[masks[i]][network] = False
+    except:
+        pass
+
+load_rule()
+load_networks()

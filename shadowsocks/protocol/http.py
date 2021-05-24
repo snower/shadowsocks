@@ -42,7 +42,7 @@ class HttpProtocol(Protocol):
 
     def parse(self,data):
         if self.method is None:
-            data=self.get_method(data)
+            data = self.get_method(data)
         if self.method.lower() == b"connect":
             self.parse_https(data)
         elif self.method.lower() in (b"get", b"post", b"put", b"options", b"head", b"delete", b"patch"):

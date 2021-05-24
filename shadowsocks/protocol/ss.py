@@ -127,7 +127,7 @@ class SSProtocol(Protocol):
             data = self._crypto.decrypt(data[ip_len + 3:])
         else:
             data = self._crypto.decrypt(data)
-        _, self.remote_addr, self.remote_port, header_length = self.parse_header(data)
+        self.remote_type, self.remote_addr, self.remote_port, header_length = self.parse_header(data)
         raise ProtocolParseEndError(data[header_length:])
 
     def unpack_udp(self, data, address):
@@ -160,7 +160,7 @@ class SSProtocol(Protocol):
         else:
             raise Exception(data)
         remote_port, = struct.unpack('>H', remote_port)
-        return remote_addr, remote_port, data[header_length:], proxy_address
+        return addr_type, remote_addr, remote_port, data[header_length:], proxy_address
 
     def pack_udp(self, remote_addr, remote_port, data):
         crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
