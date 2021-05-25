@@ -4,35 +4,32 @@
 
 import struct
 import socket
-import logging
-from .default import rules, load_rule, networks, masks, load_networks
+from . import default
 
 def check_host(host):
-    if host in rules:
+    if host in default.rules:
         return True
 
     hosts = host.split(".")
-    if len(rules) > 2:
-        for i in range(len(rules) - 2):
-            host = ".".join(hosts[-(i+2):])
-            if host in rules:
-                return True
+    for i in range(len(hosts)):
+        host = ".".join(hosts[-(i+1):])
+        if host in default.rules:
+            return True
     return False
 
 def check_ip(ip):
     try:
         ip = struct.unpack(">I", socket.inet_aton(ip))[0]
-        for mask in masks:
+        for mask in default.masks:
             network = ip >> (32 - mask)
-            if network not in networks[mask]:
+            if network not in default.networks[mask]:
                 return False
-            if networks[mask][network]:
+            if default.networks[mask][network]:
                 return True
     except:
         return False
     return False
 
 def reload_rule():
-    load_rule()
-    load_networks()
-    logging.info("reload rule success %s %s %s", len(rules), len(networks), len(masks))
+    default.load_rule()
+    default.load_networks()

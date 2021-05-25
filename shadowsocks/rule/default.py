@@ -20,6 +20,12 @@ default_rules = {
     "gstatic.com",
 }
 
+default_networds = (
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+)
+
 rules = set([])
 networks = defaultdict(dict)
 masks = []
@@ -50,6 +56,8 @@ def load_networks():
         try:
             with open("china_ip_list.txt") as fp:
                 for line in fp:
+                    if "#" in line:
+                        continue
                     info = line.strip().split("/")
                     mask = int(info[1]) if len(info) >= 2 else 32
                     network = struct.unpack(">I", socket.inet_aton(info[0]))[0] >> (32 - mask)
@@ -57,7 +65,7 @@ def load_networks():
         except:
             pass
 
-        for line in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"):
+        for line in default_networds:
             info = line.strip().split("/")
             mask = int(info[1]) if len(info) >= 2 else 32
             network = struct.unpack(">I", socket.inet_aton(info[0]))[0] >> (32 - mask)

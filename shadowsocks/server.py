@@ -24,85 +24,15 @@ from __future__ import with_statement
 import os
 os.chdir(os.path.dirname(__file__) or '.')
 
-from collections import deque, defaultdict
 import time
 import struct
 import signal
 import logging
 import sevent
 from xstream.server import Server
-
 from utils import format_data_count
-from cache import FileBuffer
+from cache import FileBuffer, DnsSocket
 import config
-
-class DnsSocket(sevent.udp.Socket):
-    _cache = defaultdict(deque)
-    _idle_check_timeout = None
-
-    def __init__(self, host_key, *args, **kwargs):
-        super(DnsSocket, self).__init__(*args, **kwargs)
-        super(DnsSocket, self).on_data(self.on_socket_data)
-        super(DnsSocket, self).on_close(self.on_socket_colse)
-
-        self.host_key = host_key
-        self.idle_time = 0
-
-    def on_data(self, callback):
-        self._events['data'] = {callback}
-        self.emit_data = callback
-
-    def on_socket_data(self, socket, buffer):
-        pass
-
-    def on_socket_colse(self, socket):
-        try:
-            self.__class__._cache[self.host_key].remove(socket)
-        except Exception as e:
-            if self.idle_time <= 0:
-                logging.error("dns socket close error %s %s", self, e)
-
-    def close(self):
-        self.on_data(self.on_socket_data)
-        self.idle_time = time.time()
-        self._cache[self.host_key].append(self)
-
-    def do_close(self):
-        super(DnsSocket, self).close()
-
-    @classmethod
-    def instance(cls, host_key):
-        if not cls._idle_check_timeout:
-            cls._idle_check_timeout = loop.add_timeout(120, cls.check_timeout)
-        host_cache = cls._cache[host_key]
-        while host_cache:
-            socket = host_cache.pop()
-            if socket._state == sevent.udp.STATE_CLOSED:
-                continue
-            socket.idle_time = 0
-            return socket
-        return DnsSocket(host_key)
-
-    @classmethod
-    def check_timeout(cls):
-        try:
-            now = time.time()
-            for key, host_cache in tuple(cls._cache.items()):
-                while host_cache:
-                    socket = host_cache[0]
-                    if socket.idle_time and now - socket.idle_time >= 15 * 60:
-                        host_cache.popleft()
-                        try:
-                            socket.do_close()
-                        except Exception as e:
-                            logging.error("dns socket close error %s %s", socket, e)
-                        continue
-                    elif socket._state == sevent.udp.STATE_CLOSED:
-                        host_cache.popleft()
-                        continue
-                    break
-        finally:
-            cls._idle_check_timeout = loop.add_timeout(120, cls.check_timeout)
 
 class UdpResponse(object):
     def __init__(self, request):
@@ -145,7 +75,7 @@ class UdpResponse(object):
             data = buffer.next()
 
     def end(self):
-        self.conn.close()
+        self.conn.end()
         self.conn = None
 
 class ProxyResponse(object):
@@ -379,6 +309,10 @@ class Request(object):
         logging.info("server %s proxy connection %s to %s %s", server, connection, config.PROXY_ADDR, config.PROXY_PORT)
 
 if __name__ == '__main__':
+    def reload():
+        config.reload()
+        logging.info("reload finish")
+    signal.signal(signal.SIGHUP, lambda signum, frame: sevent.current().add_async(reload))
     signal.signal(signal.SIGINT, lambda signum, frame: sevent.current().stop())
     signal.signal(signal.SIGTERM, lambda signum, frame: sevent.current().stop())
 
