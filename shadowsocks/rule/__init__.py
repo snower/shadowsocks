@@ -6,6 +6,9 @@ import struct
 import socket
 from . import default
 
+def has_host_rule():
+    return default.rules
+
 def check_host(host):
     if host in default.rules:
         return True
@@ -16,6 +19,9 @@ def check_host(host):
         if host in default.rules:
             return True
     return False
+
+def has_ip_rule():
+    return default.masks
 
 def check_ip(ip):
     try:

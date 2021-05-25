@@ -38,7 +38,7 @@ from protocol.sock4 import Sock4Protocol
 from protocol.sock5 import Sock5Protocol
 from protocol.redirect import RedirectProtocol
 from protocol.ss import SSProtocol
-from rule import check_host, check_ip, reload_rule
+from rule import check_host, check_ip, reload_rule, has_host_rule, has_ip_rule
 from utils import format_data_count
 from cache import FileBuffer, DnsSocket
 import config
@@ -475,7 +475,7 @@ class UdpRequest(object):
                                                                             proxy_address)
                     logging.info('%s udp connecting by dns %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
                                  proxy_address[1], remote_addr, remote_port, len(self.caches))
-                elif isinstance(self.protocol, SSProtocol) and remote_port != 443:
+                elif not has_ip_rule() and isinstance(self.protocol, SSProtocol) and remote_port != 443:
                     response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
                                                                                 proxy_address)
                     logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
