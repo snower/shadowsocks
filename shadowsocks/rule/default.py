@@ -63,11 +63,14 @@ def load_networks():
         try:
             with open("china_ip_list.txt") as fp:
                 for line in fp:
-                    if "#" in line:
+                    if "#" in line or not line.strip():
                         continue
                     info = line.strip().split("/")
                     mask = int(info[1]) if len(info) >= 2 else 32
-                    network = struct.unpack(">I", socket.inet_aton(info[0]))[0] >> (32 - mask)
+                    try:
+                        network = struct.unpack(">I", socket.inet_aton(info[0]))[0] >> (32 - mask)
+                    except:
+                        continue
                     networks[mask][network] = True
         except:
             pass
@@ -97,11 +100,14 @@ def load_network6s():
         try:
             with open("china_ip6_list.txt") as fp:
                 for line in fp:
-                    if "#" in line:
+                    if "#" in line or not line.strip():
                         continue
                     info = line.strip().split("/")
                     mask = int(info[1]) if len(info) >= 2 else 64
-                    network = struct.unpack(">Q", socket.inet_pton(socket.AF_INET6, info[0])[:8])[0] >> (64 - mask)
+                    try:
+                        network = struct.unpack(">Q", socket.inet_pton(socket.AF_INET6, info[0])[:8])[0] >> (64 - mask)
+                    except:
+                        continue
                     network6s[mask][network] = True
         except:
             pass
