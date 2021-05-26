@@ -26,9 +26,16 @@ default_networds = (
     "192.168.0.0/16"
 )
 
+default_netword6s = (
+    "fe80::/10",
+    "fc00::/7"
+)
+
 rules = set([])
 networks = defaultdict(dict)
 masks = []
+network6s = defaultdict(dict)
+mask6s = []
 
 def load_rule():
     rules.clear()
@@ -82,5 +89,40 @@ def load_networks():
     except:
         pass
 
+
+def load_network6s():
+    global network6s, mask6s
+    network6s, mask6s = defaultdict(dict), []
+    try:
+        try:
+            with open("china_ip6_list.txt") as fp:
+                for line in fp:
+                    if "#" in line:
+                        continue
+                    info = line.strip().split("/")
+                    mask = int(info[1]) if len(info) >= 2 else 64
+                    network = struct.unpack(">Q", socket.inet_pton(socket.AF_INET6, info[0])[:8])[0] >> (64 - mask)
+                    network6s[mask][network] = True
+        except:
+            pass
+
+        for line in default_networds:
+            info = line.strip().split("/")
+            mask = int(info[1]) if len(info) >= 2 else 64
+            network = struct.unpack(">Q", socket.inet_pton(socket.AF_INET6, info[0])[:8])[0] >> (64 - mask)
+            network6s[mask][network] = True
+
+        mask6s = sorted(network6s.keys())
+        for i in range(len(mask6s)):
+            for j in range(i + 1, len(mask6s)):
+                for network in network6s[mask6s[j]]:
+                    network = network >> (mask6s[j] - mask6s[i])
+                    if network in network6s[mask6s[i]]:
+                        continue
+                    network6s[mask6s[i]][network] = False
+    except:
+        pass
+
 load_rule()
 load_networks()
+load_network6s()

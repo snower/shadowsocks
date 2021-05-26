@@ -38,7 +38,7 @@ from protocol.sock4 import Sock4Protocol
 from protocol.sock5 import Sock5Protocol
 from protocol.redirect import RedirectProtocol
 from protocol.ss import SSProtocol
-from rule import check_host, check_ip, reload_rule, has_host_rule, has_ip_rule
+from rule import check_host, check_ip, check_ip6, reload_rule, has_host_rule, has_ip_rule, has_ip6_rule
 from utils import format_data_count
 from cache import FileBuffer, DnsSocket
 import config
@@ -303,8 +303,8 @@ class DnsResponse(object):
                 client.session(self.on_session)
             if not self.is_udp and not self.use_udp:
                 data = struct.pack("!H", len(data)) + data
-            data = b"".join([struct.pack(">H", len(self.proxy_remote_addr)),
-                             self.proxy_remote_addr.encode("utf-8"),
+            proxy_remote_addr = self.proxy_remote_addr.encode("utf-8")
+            data = b"".join([struct.pack(">H", len(proxy_remote_addr)), proxy_remote_addr,
                              struct.pack('>H', self.remote_port), data])
             if self.stream:
                 self.stream.write(data)
@@ -407,10 +407,12 @@ class UdpResponse(object):
         self.request.end(self.address)
         self.stream = None
 
-    def write(self,data):
+    def write(self, data):
         if not data:
             return
-        data = b"".join([struct.pack(">H", len(self.remote_addr)), self.remote_addr.encode("utf-8"),
+
+        remote_addr = self.remote_addr.encode("utf-8")
+        data = b"".join([struct.pack(">H", len(remote_addr)), remote_addr,
                          struct.pack('>H', self.remote_port), data])
         if self.stream:
             self.stream.write(data)
@@ -465,39 +467,46 @@ class UdpRequest(object):
             data, address = buffer.next()
             remote_type, remote_addr, remote_port, data, proxy_address = self.protocol.unpack_udp(data, address)
             if address not in self.caches:
-                if remote_addr in config.LOCAL_HOSTS or (remote_type == 1 and check_ip(remote_addr)):
-                    response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
-                                                                                proxy_address)
-                    logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
-                                 proxy_address[1], remote_addr, remote_port, len(self.caches))
-                elif remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
+                if remote_port == 53 and remote_addr in config.EDNS_CLIENT_SUBNETS:
                     response = self.__class__.caches[address] = DnsResponse(self, address, remote_addr, remote_port,
                                                                             proxy_address)
+                    response.write(data)
                     logging.info('%s udp connecting by dns %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
                                  proxy_address[1], remote_addr, remote_port, len(self.caches))
-                elif not has_ip_rule() and isinstance(self.protocol, SSProtocol) and remote_port != 443:
+                    return
+
+                is_local_host = False
+                if remote_addr in config.LOCAL_HOSTS:
+                    is_local_host = True
+                elif remote_type == 1:
+                    if check_ip(remote_addr):
+                        is_local_host = True
+                    elif remote_port != 443 and not has_ip_rule() and isinstance(self.protocol, SSProtocol):
+                        is_local_host = True
+                elif remote_type == 4:
+                    if check_ip6(remote_addr):
+                        is_local_host = True
+                    elif remote_port != 443 and not has_ip6_rule() and isinstance(self.protocol, SSProtocol):
+                        is_local_host = True
+                elif config.USE_RULE:
+                    is_local_host = True if not check_host(remote_addr) else False
+
+                if is_local_host:
                     response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
                                                                                 proxy_address)
+                    response.write(data)
                     logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
                                  proxy_address[1], remote_addr, remote_port, len(self.caches))
-                elif config.USE_RULE:
-                    if not check_host(self.protocol.remote_addr):
-                        response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr,
-                                                                                    remote_port, proxy_address)
-                        logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
-                                     proxy_address[1], remote_addr, remote_port, len(self.caches))
-                    else:
-                        response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port,
+                    return
+
+                response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port,
                                                                                 proxy_address)
-                        logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
-                                     proxy_address[1], remote_addr, remote_port, len(self.caches))
-                else:
-                    response = self.__class__.caches[address] = UdpResponse(self, address, remote_addr, remote_port,
-                                                                            proxy_address)
-                    logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
-                                 proxy_address[1], remote_addr, remote_port, len(self.caches))
-            else:
-                response = self.caches[address]
+                response.write(data)
+                logging.info('%s udp connecting by proxy %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
+                             proxy_address[1], remote_addr, remote_port, len(self.caches))
+                return
+
+            response = self.caches[address]
             response.write(data)
 
     def write(self, address, remote_address, data):
@@ -650,19 +659,6 @@ class Request(object):
 
             if self.protocol.remote_addr.strip() == '0.0.0.0' and not self.protocol.remote_port:
                 raise Exception("adder is empty %:%", self.protocol.remote_addr, self.protocol.remote_port)
-
-
-            if self.protocol.remote_addr in config.LOCAL_HOSTS or (self.protocol.remote_type == 1 and check_ip(self.protocol.remote_addr)):
-                self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
-                                             self.protocol.remote_port)
-                if e.data:
-                    buffer.write(e.data)
-                    self.response.write(buffer)
-                logging.info('%s connecting by direct %s:%s -> %s:%s %s', self.protocol,
-                             self.address[0], self.address[1],
-                             self.response.remote_addr, self.response.remote_port,
-                             len(self._requests))
-                return
                 
             if self.protocol.remote_port == 53 and self.protocol.remote_addr in config.EDNS_CLIENT_SUBNETS:
                 self.response = DnsResponse(self, self.address, self.protocol.remote_addr,
@@ -676,26 +672,36 @@ class Request(object):
                              len(self._requests))
                 return
 
-            if config.USE_RULE:
-                if not check_host(self.protocol.remote_addr):
-                    self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
-                                                 self.protocol.remote_port)
-                    if e.data:
-                        buffer.write(e.data)
-                        self.response.write(buffer)
-                    logging.info('%s connecting by direct %s:%s -> %s:%s %s',self.protocol,
-                                 self.address[0], self.address[1],
-                                 self.response.remote_addr, self.response.remote_port,
-                                 len(self._requests))
-                    return
+            is_local_host = False
+            if self.protocol.remote_addr in config.LOCAL_HOSTS:
+                is_local_host = True
+            elif self.protocol.remote_type == 1:
+                is_local_host = True if check_ip(self.protocol.remote_addr) else False
+            elif self.protocol.remote_type == 4:
+                is_local_host = True if check_ip6(self.protocol.remote_addr) else False
+            elif config.USE_RULE:
+                is_local_host = True if not check_host(self.protocol.remote_addr) else False
+
+            if is_local_host:
+                self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
+                                             self.protocol.remote_port)
+                if e.data:
+                    buffer.write(e.data)
+                    self.response.write(buffer)
+                logging.info('%s connecting by direct %s:%s -> %s:%s %s',self.protocol,
+                             self.address[0], self.address[1],
+                             self.response.remote_addr, self.response.remote_port,
+                             len(self._requests))
+                return
 
             self.response = Response(self, self.protocol, self.protocol.remote_addr, self.protocol.remote_port)
-            buffer.write(b"".join([struct.pack(">H", len(self.protocol.remote_addr)),
-                                   self.protocol.remote_addr.encode("utf-8"),
+            remote_addr = self.protocol.remote_addr.encode("utf-8")
+            buffer.write(b"".join([struct.pack(">H", len(remote_addr)), remote_addr,
                                    struct.pack('>H', self.protocol.remote_port), e.data]))
-            self.response.write(buffer)
+            if e.data:
+                self.response.write(buffer)
 
-            logging.info('%s connecting by proxy %s:%s -> %s:%s %s',self.protocol,
+            logging.info('%s connecting by proxy %s:%s -> %s:%s %s', self.protocol,
                          self.address[0], self.address[1],
                          self.response.remote_addr, self.response.remote_port,
                          len(self._requests))

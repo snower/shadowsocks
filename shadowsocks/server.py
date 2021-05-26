@@ -56,7 +56,8 @@ class UdpResponse(object):
     def on_data(self, s, buffer):
         while buffer:
             data, address = buffer.next()
-            data = b"".join([struct.pack(">H", len(address[0])), address[0].encode("utf-8"),
+            remote_addr = address[0].encode("utf-8")
+            data = b"".join([struct.pack(">H", len(remote_addr)), remote_addr,
                              struct.pack(">H", address[1]), data])
             self.request.write(data)
 
