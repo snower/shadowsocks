@@ -5,6 +5,7 @@
 import struct
 from collections import defaultdict
 import socket
+import logging
 import json
 
 default_rules = {
@@ -45,16 +46,21 @@ def load_rule():
             gfwlist_rules = json.load(fp)
             for rule in gfwlist_rules:
                 rules.add(rule)
-    except:
+    except OSError:
         pass
+    except Exception as e:
+        logging.info("load rule error %s", e)
 
     try:
         with open("user_rule.json") as fp:
             user_rules = json.load(fp)
             for rule in user_rules:
                 rules.add(rule)
-    except:
+    except OSError:
         pass
+    except Exception as e:
+        logging.info("load rule error %s", e)
+    logging.info("load rule %s", len(rules))
 
 def load_networks():
     global networks, masks
@@ -89,8 +95,11 @@ def load_networks():
                     if network in networks[masks[i]]:
                         continue
                     networks[masks[i]][network] = False
-    except:
-        pass
+    except Exception as e:
+        logging.info("load networks rule error %s", e)
+        return
+    network_counts = [len(networks[mask]) for mask in masks]
+    logging.info("load networks rule %s %s %s", len(masks), sum(network_counts), network_counts)
 
 
 def load_network6s():
@@ -112,7 +121,7 @@ def load_network6s():
         except:
             pass
 
-        for line in default_networds:
+        for line in default_netword6s:
             info = line.strip().split("/")
             mask = int(info[1]) if len(info) >= 2 else 64
             network = struct.unpack(">Q", socket.inet_pton(socket.AF_INET6, info[0])[:8])[0] >> (64 - mask)
@@ -126,9 +135,8 @@ def load_network6s():
                     if network in network6s[mask6s[i]]:
                         continue
                     network6s[mask6s[i]][network] = False
-    except:
-        pass
-
-load_rule()
-load_networks()
-load_network6s()
+    except Exception as e:
+        logging.info("load network6s rule error %s", e)
+        return
+    network_counts = [len(network6s[mask]) for mask in mask6s]
+    logging.info("load network6s rule %s %s %s", len(mask6s), sum(network_counts), network_counts)

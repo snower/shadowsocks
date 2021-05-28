@@ -4,6 +4,7 @@
 
 import struct
 import socket
+import logging
 from . import default
 
 def has_host_rule():
@@ -32,7 +33,8 @@ def check_ip(ip):
                 return False
             if default.networks[mask][network]:
                 return True
-    except:
+    except Exception as e:
+        logging.info("check_ip error %s %s", ip, e)
         return False
     return False
 
@@ -48,7 +50,8 @@ def check_ip6(ip):
                 return False
             if default.network6s[mask][network]:
                 return True
-    except:
+    except Exception as e:
+        logging.info("check_ip6 error %s %s", ip, e)
         return False
     return False
 

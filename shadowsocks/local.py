@@ -825,6 +825,7 @@ if __name__ == '__main__':
     logging.info('shadowsocks v2.0')
     try:
         logging.info("starting server at port %d ..." % config.PORT)
+        reload_rule()
         loop = sevent.instance()
         client = Client(config.SERVER, config.REMOTE_PORT, 3, config.KEY,
                         config.METHOD.replace("-", "_"), config.SESSION_ID)
