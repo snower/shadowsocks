@@ -12,12 +12,8 @@ optlist, args = getopt.getopt(sys.argv[1:], 'c:s:p:k:b:l:m:v')
 config_file = dict(optlist)['-c'] if '-c' in dict(optlist) else 'config.json'
 
 def load_conf():
-    try:
-        with open(config_file, 'rb') as f:
-            config = json.load(f)
-    except:
-        config = {}
-    return config
+    with open(config_file, 'rb') as f:
+        return json.load(f)
 
 def parse_hosts():
     etc_path = '/etc/hosts'
