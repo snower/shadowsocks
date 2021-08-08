@@ -312,6 +312,7 @@ class Request(object):
 if __name__ == '__main__':
     def reload():
         config.reload()
+        sevent.DNSResolver.default().close()
         sevent.DNSResolver._instance = sevent.DNSResolver()
         logging.info("reload finish")
     signal.signal(signal.SIGHUP, lambda signum, frame: sevent.current().add_async(reload))
