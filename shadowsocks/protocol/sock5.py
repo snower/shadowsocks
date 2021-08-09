@@ -40,7 +40,7 @@ class Sock5Protocol(Protocol):
             self.local_port = config.PORT
             return 2
         self.request.end()
-        raise Exception("sock5 unknown cmd %s", cmd)
+        raise Exception("sock5 unknown cmd %s" % cmd)
 
     def parse_addr_info(self,data):
         addr_type = data[3]
@@ -61,7 +61,7 @@ class Sock5Protocol(Protocol):
             self.remote_port = data[5 + addr_len:5 + addr_len + 2]
             self.header_length = 5 + addr_len + 2
         else:
-            raise Exception(data)
+            raise Exception("sock5 unknown addr_type %s" % addr_type)
         self.remote_port, = struct.unpack('>H', self.remote_port)
 
     def unpack_udp(self, data, address):
@@ -80,7 +80,7 @@ class Sock5Protocol(Protocol):
             remote_port = data[5 + addr_len:5 + addr_len + 2]
             header_length = 5 + addr_len + 2
         else:
-            raise Exception(data)
+            raise Exception("sock5 udp unknown addr_type %s" % addr_type)
         remote_port, = struct.unpack('>H', remote_port)
         return addr_type, remote_addr, remote_port, data[header_length:], address
 

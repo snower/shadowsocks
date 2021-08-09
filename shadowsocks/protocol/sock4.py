@@ -27,7 +27,7 @@ class Sock4Protocol(Protocol):
             self.local_port = config.PORT
             return 1
         self.request.end()
-        raise Exception("sock4 unknown cmd %s", cmd)
+        raise Exception("sock4 unknown cmd %s" % cmd)
 
     def parse_addr_info(self, data):
         self.remote_type = 1

@@ -91,7 +91,7 @@ class SSProtocol(Protocol):
                 dest_port = struct.unpack('>H', data[5:7])[0]
                 header_length = 7
             else:
-                raise Exception('header is too short')
+                raise Exception('ss header is too short %s' % len(data))
         elif addrtype == ADDRTYPE_HOST:
             if len(data) > 2:
                 addrlen = data[1]
@@ -100,19 +100,18 @@ class SSProtocol(Protocol):
                     dest_port = struct.unpack('>H', data[2 + addrlen:4 + addrlen])[0]
                     header_length = 4 + addrlen
                 else:
-                    raise Exception('header is too short')
+                    raise Exception('ss header is too short %s' % len(data))
             else:
-                raise Exception('header is too short')
+                raise Exception('ss header is too short %s' % len(data))
         elif addrtype == ADDRTYPE_IPV6:
             if len(data) >= 19:
                 dest_addr = socket.inet_ntop(socket.AF_INET6, data[1:17])
                 dest_port = struct.unpack('>H', data[17:19])[0]
                 header_length = 19
             else:
-                raise Exception('header is too short')
+                raise Exception('ss header is too short %s' % len(data))
         else:
-            raise Exception('unsupported addrtype %d, maybe wrong password' %
-                         addrtype)
+            raise Exception('ss unsupported addrtype %d, maybe wrong password' % addrtype)
         if dest_addr is None:
             return None
         return addrtype, dest_addr, dest_port, header_length
@@ -137,7 +136,7 @@ class SSProtocol(Protocol):
             ip_len = data[0]
             proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
             if ip_len + 3 >= len(data):
-                raise Exception(data)
+                raise Exception('ss header is too short %s' % len(data))
             data = crypto.decrypt(data[ip_len + 3:])
         else:
             proxy_address = address
@@ -158,7 +157,7 @@ class SSProtocol(Protocol):
             remote_port = data[2 + addr_len:2 + addr_len + 2]
             header_length = 2 + addr_len + 2
         else:
-            raise Exception(data)
+            raise Exception("ss udp unknown addr_type %s" % addr_type)
         remote_port, = struct.unpack('>H', remote_port)
         return addr_type, remote_addr, remote_port, data[header_length:], proxy_address
 

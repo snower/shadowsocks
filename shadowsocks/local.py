@@ -327,7 +327,7 @@ class DnsResponse(object):
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
         except Exception as e:
-            logging.error("parse addr error: %s %s", e, data)
+            logging.error("parse addr error: %s %s", e, len(data))
             return None, ''
 
     def handle_edns_client_subnet(self, dns_record):
@@ -432,7 +432,7 @@ class UdpResponse(object):
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
         except Exception as e:
-            logging.error("parse addr error: %s %s", e, data)
+            logging.error("parse addr error: %s %s", e, len(data))
             return None, ''
 
     def get_send_data_len(self):

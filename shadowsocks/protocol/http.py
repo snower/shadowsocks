@@ -26,7 +26,7 @@ class HttpProtocol(Protocol):
         else:
             self.remote_port = 80
         if not self.remote_addr or not self.remote_port:
-            raise Exception(addr_info)
+            raise Exception("http unknown addr_info %s" % addr_info)
 
     def parse_http(self, data):
         data = data[7:]

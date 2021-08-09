@@ -50,7 +50,7 @@ class UdpResponse(object):
             remote_port, = struct.unpack('>H', data[addr_len + 2: addr_len + 4])
             return (remote_addr, remote_port), data[addr_len + 4:]
         except Exception as e:
-            logging.error("parse addr error: %s %s", e, data)
+            logging.error("parse addr error: %s %s", e, len(data))
             return None, ''
 
     def on_data(self, s, buffer):
@@ -262,7 +262,7 @@ class Request(object):
             self.remote_port, = struct.unpack('>H', data.read(2))
             self.header_length = addr_len + 4
         except Exception as e:
-            logging.error("parse addr error: %s %s", e, data)
+            logging.error("parse addr error: %s %s", e, len(data))
             self.end()
             return False
         if self.remote_addr == '0.0.0.0' or not self.remote_port:
