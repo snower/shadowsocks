@@ -52,6 +52,8 @@ class PassResponse(object):
         self.is_connected = False
         self.buffer = None
         self.time = time.time()
+        self.data_time = time.time()
+        self.data_timeout_timer = None
         self.send_data_len = 0
         self.recv_data_len = 0
 
@@ -64,20 +66,33 @@ class PassResponse(object):
         self.conn.on('end', self.on_end)
         self.conn.connect((self.request.protocol.remote_addr, self.request.protocol.remote_port), 30)
 
+    def on_timeout(self):
+        if time.time() - self.data_time > 15 * 60:
+            if self.conn:
+                self.conn.close()
+            return
+        self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
+
     def on_connect(self, s):
         self.is_connected = True
+        self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
         rbuffer, wbuffer = self.conn.buffer
         wbuffer.link(self.request.rbuffer)
         self.request.wbuffer.link(rbuffer)
         if self.buffer:
             self.write(self.buffer)
+            self.data_time = time.time()
 
     def on_data(self, s, data):
         self.recv_data_len += len(data)
         self.request.write(data)
+        self.data_time = time.time()
 
     def on_close(self, s):
         self.request.end()
+        if self.data_timeout_timer:
+            sevent.current().cancel_timeout(self.data_timeout_timer)
+            self.data_timeout_timer = None
 
     def on_end(self, s):
         pass
@@ -87,6 +102,7 @@ class PassResponse(object):
         if self.is_connected or self.conn.is_enable_fast_open:
             try:
                 self.conn.write(data)
+                self.data_time = time.time()
             except sevent.errors.SocketClosed:
                 pass
         else:
@@ -110,14 +126,26 @@ class UdpPassResponse(object):
         self.remote_port = remote_port
         self.time = time.time()
         self.data_time = time.time()
+        self.data_timeout_timer = None
         self.conn = None
         self.send_data_len = 0
         self.recv_data_len = 0
+        self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
+
+    def on_timeout(self):
+        if time.time() - self.data_time > 15 * 60:
+            if self.conn:
+                self.conn.close()
+            return
+        self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
 
     def on_close(self, s):
         if self.conn:
             self.request.end(self.address)
         self.conn = None
+        if self.data_timeout_timer:
+            sevent.current().cancel_timeout(self.data_timeout_timer)
+            self.data_timeout_timer = None
 
     def on_data(self, s, buffer):
         while buffer:

@@ -85,6 +85,8 @@ class ProxyResponse(object):
         self.is_connected = False
         self.buffer = None
         self.time = time.time()
+        self.data_time = time.time()
+        self.data_timeout_timer = None
         self.send_data_len = 0
         self.recv_data_len = 0
 
@@ -101,12 +103,20 @@ class ProxyResponse(object):
         else:
             self.proxy_connection = None
 
+    def on_timeout(self):
+        if time.time() - self.data_time > 15 * 60:
+            if self.proxy_connection:
+                self.proxy_connection.close()
+            return
+        self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
+
     def on_connect(self, s):
         if not self.connection:
             self.proxy_connection.close()
             return
 
         self.is_connected = True
+        self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
         rbuffer, wbuffer = self.connection.buffer
         proxy_rbuffer, proxy_wbuffer = self.proxy_connection.buffer
         proxy_wbuffer.link(rbuffer)
@@ -114,23 +124,29 @@ class ProxyResponse(object):
         if self.buffer:
             self.send_data_len += len(self.buffer)
             self.proxy_connection.write(self.buffer)
+            self.data_time = time.time()
 
     def on_proxy_data(self, s, data):
         if not self.connection:
             return
         self.recv_data_len += len(data)
         self.connection.write(data)
+        self.data_time = time.time()
 
     def on_proxy_close(self, s):
         if self.connection:
             self.connection.end()
         self.proxy_connection = None
+        if self.data_timeout_timer:
+            sevent.current().cancel_timeout(self.data_timeout_timer)
+            self.data_timeout_timer = None
 
     def on_data(self, s, data):
         if not self.proxy_connection:
             return
         self.send_data_len += len(data)
         self.proxy_connection.write(data)
+        self.data_time = time.time()
 
     def on_close(self, s):
         if self.proxy_connection:
@@ -149,6 +165,7 @@ class ProxyResponse(object):
             try:
                 self.send_data_len += len(data)
                 self.proxy_connection.write(data)
+                self.data_time = time.time()
             except sevent.errors.SocketClosed:
                 pass
         else:
