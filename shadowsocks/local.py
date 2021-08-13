@@ -67,9 +67,11 @@ class PassResponse(object):
         self.conn.connect((self.request.protocol.remote_addr, self.request.protocol.remote_port), 30)
 
     def on_timeout(self):
+        if not self.conn:
+            return
+
         if time.time() - self.data_time > 15 * 60:
-            if self.conn:
-                self.conn.close()
+            self.conn.close()
             return
         self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
 
@@ -128,11 +130,15 @@ class UdpPassResponse(object):
         self.data_time = time.time()
         self.data_timeout_timer = None
         self.conn = None
+        self.closed = False
         self.send_data_len = 0
         self.recv_data_len = 0
         self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
 
     def on_timeout(self):
+        if self.closed:
+            return
+
         if time.time() - self.data_time > 15 * 60:
             if self.conn:
                 self.conn.close()
@@ -143,6 +149,7 @@ class UdpPassResponse(object):
         if self.conn:
             self.request.end(self.address)
         self.conn = None
+        self.closed = True
         if self.data_timeout_timer:
             sevent.current().cancel_timeout(self.data_timeout_timer)
             self.data_timeout_timer = None
@@ -175,6 +182,7 @@ class UdpPassResponse(object):
         if self.conn:
             self.conn.end()
             self.conn = None
+        self.closed = True
         self.request.end(self.address)
 
     def get_send_data_len(self):

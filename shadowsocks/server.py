@@ -104,9 +104,11 @@ class ProxyResponse(object):
             self.proxy_connection = None
 
     def on_timeout(self):
+        if not self.proxy_connection:
+            return
+
         if time.time() - self.data_time > 15 * 60:
-            if self.proxy_connection:
-                self.proxy_connection.close()
+            self.proxy_connection.close()
             return
         self.data_timeout_timer = sevent.current().add_timeout(60, self.on_timeout)
 
