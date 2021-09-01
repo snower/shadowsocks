@@ -16,10 +16,22 @@ def check_host(host):
 
     hosts = host.split(".")
     for i in range(len(hosts)):
-        host = ".".join(hosts[-(i+1):])
-        if host in default.rules:
+        hp = ".".join(hosts[-(i+1):])
+        if hp in default.rules:
             return True
-    return False
+
+    return check_address(host)
+
+def check_address(address):
+    try:
+        socket.inet_pton(socket.AF_INET, address)
+        return check_ip(address)
+    except (TypeError, ValueError, OSError, IOError):
+        try:
+            socket.inet_pton(socket.AF_INET6, address)
+            return check_ip6(address)
+        except (TypeError, ValueError, OSError, IOError):
+            return False
 
 def has_ip_rule():
     return default.masks

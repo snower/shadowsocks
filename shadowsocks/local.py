@@ -38,7 +38,7 @@ from protocol.sock4 import Sock4Protocol
 from protocol.sock5 import Sock5Protocol
 from protocol.redirect import RedirectProtocol
 from protocol.ss import SSProtocol
-from rule import check_host, check_ip, check_ip6, reload_rule, has_host_rule, has_ip_rule, has_ip6_rule
+from rule import check_host, check_address, check_ip, check_ip6, reload_rule, has_host_rule, has_ip_rule, has_ip6_rule
 from utils import format_data_count
 from cache import FileBuffer, DnsSocket
 import config
@@ -482,6 +482,7 @@ class UdpRequest(object):
 
     def __init__(self, server, protocol):
         self.protocol = protocol
+        self.proxy_type = "proxy"
         self.server = server
         self.server.on("data", self.on_data)
 
@@ -507,6 +508,7 @@ class UdpRequest(object):
                     response = self.__class__.caches[address] = DnsResponse(self, address, remote_addr, remote_port,
                                                                             proxy_address)
                     response.write(data)
+                    self.proxy_type = "dns"
                     logging.info('%s udp connecting by dns %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
                                  proxy_address[1], remote_addr, remote_port, len(self.caches))
                     return
@@ -526,11 +528,14 @@ class UdpRequest(object):
                         is_local_host = True
                 elif config.USE_RULE:
                     is_local_host = True if not check_host(remote_addr) else False
+                else:
+                    is_local_host = True if check_address(remote_addr) else False
 
                 if is_local_host:
                     response = self.__class__.caches[address] = UdpPassResponse(self, address, remote_addr, remote_port,
                                                                                 proxy_address)
                     response.write(data)
+                    self.proxy_type = "direct"
                     logging.info('%s udp connecting by direct %s:%s -> %s:%s %d', self.protocol, proxy_address[0],
                                  proxy_address[1], remote_addr, remote_port, len(self.caches))
                     return
@@ -558,7 +563,7 @@ class UdpRequest(object):
             del self.__class__.caches[address]
             if response.proxy_address:
                 address = response.proxy_address
-            logging.info('%s udp connected %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol,
+            logging.info('%s udp closed by %s %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol, self.proxy_type,
                          address[0], address[1],
                          response.remote_addr, response.remote_port,
                          len(self.caches), time.time() - response.time,
@@ -653,6 +658,7 @@ class Request(object):
         self.conn = conn
         self.address = conn.address
         self.response = None
+        self.proxy_type = "proxy"
         self.protocol = None
         self.protocol_parse_end = False
         self.time = time.time()
@@ -702,6 +708,7 @@ class Request(object):
                 if e.data:
                     buffer.write(e.data)
                     self.response.write(buffer)
+                self.proxy_type = "dns"
                 logging.info('%s connecting by dns %s:%s -> %s:%s %s', self.protocol,
                              self.address[0], self.address[1],
                              self.response.remote_addr, self.response.remote_port,
@@ -717,6 +724,8 @@ class Request(object):
                 is_local_host = True if check_ip6(self.protocol.remote_addr) else False
             elif config.USE_RULE:
                 is_local_host = True if not check_host(self.protocol.remote_addr) else False
+            else:
+                is_local_host = True if check_address(self.protocol.remote_addr) else False
 
             if is_local_host:
                 self.response = PassResponse(self, self.protocol, self.protocol.remote_addr,
@@ -724,6 +733,7 @@ class Request(object):
                 if e.data:
                     buffer.write(e.data)
                     self.response.write(buffer)
+                self.proxy_type = "direct"
                 logging.info('%s connecting by direct %s:%s -> %s:%s %s',self.protocol,
                              self.address[0], self.address[1],
                              self.response.remote_addr, self.response.remote_port,
@@ -777,7 +787,7 @@ class Request(object):
         if self.response:
             self.response.end()
         self.__class__._requests.remove(self)
-        logging.info('%s connected %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol,
+        logging.info('%s closed by %s %s:%s -> %s:%s %s %.3fs %s/%s', self.protocol, self.proxy_type,
                      self.address[0], self.address[1],
                      self.response.remote_addr if self.response else (self.protocol.remote_addr if self.protocol else ''),
                      self.response.remote_port if self.response else (self.protocol.remote_port if self.protocol else ''),
