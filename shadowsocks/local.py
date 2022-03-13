@@ -32,7 +32,7 @@ import logging
 import socket
 import dnslib
 from xstream.client import Client
-from protocol import ProtocolParseEndError
+from protocol import ProtocolParseEndError, ProtocolParseError
 from protocol.http import HttpProtocol
 from protocol.sock4 import Sock4Protocol
 from protocol.sock5 import Sock5Protocol
@@ -751,8 +751,11 @@ class Request(object):
                          self.address[0], self.address[1],
                          self.response.remote_addr, self.response.remote_port,
                          len(self._requests))
+        except ProtocolParseError as e:
+            logging.error("parse protocol error: %s", e)
+            self.end()
         except Exception as e:
-            logging.error(e)
+            logging.error("parse protocol error: %s\n%s", e, traceback.format_exc())
             self.end()
 
     def on_data(self, s, buffer):

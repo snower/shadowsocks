@@ -2,7 +2,7 @@
 #14-6-3
 # create by: snower
 
-from protocol import Protocol, ProtocolParseEndError
+from protocol import Protocol, ProtocolParseEndError, ProtocolParseError
 
 class HttpProtocol(Protocol):
     def __init__(self, *args, **kwargs):
@@ -26,7 +26,7 @@ class HttpProtocol(Protocol):
         else:
             self.remote_port = 80
         if not self.remote_addr or not self.remote_port:
-            raise Exception("http unknown addr_info %s" % addr_info)
+            raise ProtocolParseError("http unknown addr_info %s" % addr_info)
 
     def parse_http(self, data):
         data = data[7:]
@@ -48,5 +48,5 @@ class HttpProtocol(Protocol):
         elif self.method.lower() in (b"get", b"post", b"put", b"options", b"head", b"delete", b"patch"):
             self.parse_http(data)
         else:
-            raise Exception("unknown method %s" % self.method)
+            raise ProtocolParseError("unknown method %s" % self.method)
 

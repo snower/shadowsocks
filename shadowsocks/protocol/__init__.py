@@ -2,6 +2,9 @@
 #14-6-3
 # create by: snower
 
+class ProtocolParseError(Exception):
+    pass
+
 class ProtocolParseEndError(Exception):
     def __init__(self, data, inet_ut=1, *args, **kwargs):
         super(ProtocolParseEndError, self).__init__(*args, **kwargs)
