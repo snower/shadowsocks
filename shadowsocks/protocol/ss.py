@@ -83,6 +83,12 @@ class SSProtocol(Protocol):
         self._crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         self.proxy_address = None
 
+    def has_enough_data(self, buffer):
+        decipher_iv_len = ALG_KEY_IV_LEN.get(self._crypto._alg)[1]
+        if self.from_proxy:
+            return len(buffer) >= decipher_iv_len + 8
+        return len(buffer) >= decipher_iv_len + 4
+
     def parse_header(self, data):
         addrtype = data[0]
         if addrtype == ADDRTYPE_IPV4:
