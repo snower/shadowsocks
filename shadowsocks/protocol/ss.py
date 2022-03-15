@@ -83,10 +83,20 @@ class SSProtocol(Protocol):
         self._crypto = Crypto(config.SSKEY, config.SSMETHOD.replace("-", "_"))
         self.proxy_address = None
 
+    def parse_proxy(self, buffer):
+        if not self.from_proxy:
+            return True
+        if self.proxy_address:
+            return True
+        if len(buffer) < 4:
+            return False
+        ip_len = struct.unpack('>B', buffer.read(1))[0]
+        self.proxy_address = (buffer.read(ip_len).decode("utf-8"), struct.unpack('>H', buffer.read(2))[0])
+        self.request.address = self.proxy_address
+        return True
+
     def has_enough_data(self, buffer):
         decipher_iv_len = ALG_KEY_IV_LEN.get(self._crypto._alg)[1]
-        if self.from_proxy:
-            return len(buffer) >= decipher_iv_len + 8
         return len(buffer) >= decipher_iv_len + 4
 
     def parse_header(self, data):
@@ -123,15 +133,7 @@ class SSProtocol(Protocol):
         return addrtype, dest_addr, dest_port, header_length
 
     def parse(self, data):
-        if self.from_proxy and self.proxy_address is None:
-            ip_len = data[0]
-            self.proxy_address = (data[1:ip_len + 1].decode("utf-8"), struct.unpack('>H', data[ip_len + 1:ip_len + 3])[0])
-            self.request.address = self.proxy_address
-            if ip_len + 3 >= len(data):
-                return
-            data = self._crypto.decrypt(data[ip_len + 3:])
-        else:
-            data = self._crypto.decrypt(data)
+        data = self._crypto.decrypt(data)
         self.remote_type, self.remote_addr, self.remote_port, header_length = self.parse_header(data)
         raise ProtocolParseEndError(data[header_length:])
 

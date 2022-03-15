@@ -845,10 +845,14 @@ class SSRequest(Request):
 
         if self.protocol is None:
             self.protocol = SSProtocol(self, self.address)
+            if not self.protocol.parse_proxy(buffer):
+                return
             if not self.protocol.has_enough_data(buffer):
                 return
             self.parse(buffer.read(-1), self.rbuffer)
         else:
+            if not self.protocol.parse_proxy(buffer):
+                return
             if not self.protocol.has_enough_data(buffer):
                 return
             self.parse(buffer.read(-1), self.rbuffer)
