@@ -607,6 +607,11 @@ class Response(object):
             self.file_buffer = False
 
     def on_regain(self, buffer):
+        if self.file_buffer is False:
+            if self.is_ended:
+                self.request.end()
+            return
+
         if self.file_buffer.wlen > self.file_buffer.rlen:
             wlen = self.request.wbuffer._drain_size - len(self.request.wbuffer) + 16
             self.request.write(self.file_buffer.read(wlen))
