@@ -4,7 +4,6 @@
 
 import os
 import time
-import struct
 from collections import defaultdict, deque
 import logging
 import sevent
@@ -20,7 +19,7 @@ class FileBuffer(object):
 
     def open(self):
         cache_path = self.init_dir()
-        self.filename = cache_path + os.path.sep + struct.pack("!Q", int(id(self))).encode("hex")
+        self.filename = cache_path + os.path.sep + str(id(self))
         self.fp = open(self.filename, 'wb+')
 
     def init_dir(self):
