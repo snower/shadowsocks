@@ -514,7 +514,9 @@ class UdpRequest(object):
                     return
 
                 is_local_host = False
-                if remote_type == 1:
+                if remote_addr in config.LOCAL_HOSTS:
+                    is_local_host = True
+                elif remote_type == 1:
                     if check_ip(remote_addr):
                         is_local_host = True
                     elif remote_port != 443 and not has_ip_rule() and isinstance(self.protocol, SSProtocol):
@@ -524,7 +526,7 @@ class UdpRequest(object):
                         is_local_host = True
                     elif remote_port != 443 and not has_ip6_rule() and isinstance(self.protocol, SSProtocol):
                         is_local_host = True
-                elif remote_addr in config.LOCAL_HOSTS or config.USE_RULE:
+                elif config.USE_RULE:
                     is_local_host = True if not check_host(remote_addr) else False
                 else:
                     is_local_host = True if check_address(remote_addr) else False
@@ -718,11 +720,14 @@ class Request(object):
                              len(self._requests))
                 return
 
-            if self.protocol.remote_type == 1:
+            is_local_host = False
+            if self.protocol.remote_addr in config.LOCAL_HOSTS:
+                is_local_host = True
+            elif self.protocol.remote_type == 1:
                 is_local_host = True if check_ip(self.protocol.remote_addr) else False
             elif self.protocol.remote_type == 4:
                 is_local_host = True if check_ip6(self.protocol.remote_addr) else False
-            elif self.protocol.remote_addr in config.LOCAL_HOSTS or config.USE_RULE:
+            elif config.USE_RULE:
                 is_local_host = True if not check_host(self.protocol.remote_addr) else False
             else:
                 is_local_host = True if check_address(self.protocol.remote_addr) else False
