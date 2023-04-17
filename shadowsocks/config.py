@@ -15,7 +15,7 @@ def load_conf():
     with open(config_file, 'rb') as f:
         return json.load(f)
 
-def parse_hosts():
+def parse_hosts(exclude_ips=None):
     etc_path = '/etc/hosts'
     if 'WINDIR' in os.environ:
         etc_path = os.environ['WINDIR'] + '/system32/drivers/etc/hosts'
@@ -28,6 +28,8 @@ def parse_hosts():
                     continue
                 parts = line.split()
                 if len(parts) < 2:
+                    continue
+                if exclude_ips and parts[0] in exclude_ips:
                     continue
                 for i in range(1, len(parts)):
                     hostname = parts[i].strip()
@@ -60,6 +62,7 @@ SSPROXYS = set(config.get("ssproxys", []))
 EDNS_CLIENT_SUBNETS = config.get("edns_client_subnets", {
     "8.8.8.8": "119.29.29.29"
 })
+VIRTUAL_PROXY_ADDR = config.get("virtual_proxy_addr")
 
 for key, value in optlist:
     if key == '-p':
@@ -78,12 +81,12 @@ for key, value in optlist:
         LOG_LEVEL = logging.NOTSET
 
 if not LOCAL_HOSTS:
-    LOCAL_HOSTS = set(parse_hosts())
+    LOCAL_HOSTS = set(parse_hosts([VIRTUAL_PROXY_ADDR] if VIRTUAL_PROXY_ADDR else None))
 
 def reload():
     global SERVER, REMOTE_PORT, BIND_ADDR, PORT, SSPORT, KEY, METHOD, SESSION_ID, TIME_OUT,\
         LOG_LEVEL, MAX_CONNECTIONS, USE_RULE, LOCAL_NETWORK, LOCAL_HOSTS, PROXY_ADDR, PROXY_PORT,\
-        SSKEY, SSMETHOD, SSPROXYS, EDNS_CLIENT_SUBNETS
+        SSKEY, SSMETHOD, SSPROXYS, EDNS_CLIENT_SUBNETS, VIRTUAL_PROXY_ADDR
 
     config = load_conf()
     SERVER = config.get('server', "127.0.0.1")
@@ -108,9 +111,10 @@ def reload():
     EDNS_CLIENT_SUBNETS = config.get("edns_client_subnets", {
         "8.8.8.8": "119.29.29.29"
     })
+    VIRTUAL_PROXY_ADDR = config.get("virtual_proxy_addr")
 
     if not LOCAL_HOSTS:
-        LOCAL_HOSTS = set(parse_hosts())
+        LOCAL_HOSTS = set(parse_hosts([VIRTUAL_PROXY_ADDR] if VIRTUAL_PROXY_ADDR else None))
 
 logging.basicConfig(level=LOG_LEVEL, format='%(asctime)s %(levelname)1.1s %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S', filemode='a+')
