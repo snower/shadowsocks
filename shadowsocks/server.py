@@ -356,6 +356,7 @@ if __name__ == '__main__':
         config.reload()
         sevent.DNSResolver.default().close()
         sevent.DNSResolver._instance = sevent.DNSResolver()
+        config.config_domain_hosts()
         logging.info("reload finish")
     signal.signal(signal.SIGHUP, lambda signum, frame: sevent.current().add_async(reload))
     signal.signal(signal.SIGINT, lambda signum, frame: sevent.current().stop())
@@ -365,6 +366,7 @@ if __name__ == '__main__':
     try:
         logging.info("starting server at port %d ..." % config.PORT)
         loop = sevent.instance()
+        config.config_domain_hosts()
         server = Server(config.PORT, config.BIND_ADDR, config.KEY, config.METHOD.replace("-", "_"))
         server.on('session', Request.on_session)
         server.on("connection", Request.on_connection)

@@ -63,6 +63,7 @@ EDNS_CLIENT_SUBNETS = config.get("edns_client_subnets", {
     "8.8.8.8": "119.29.29.29"
 })
 VIRTUAL_PROXY_ADDR = config.get("virtual_proxy_addr")
+DOMAIN_HOSTS = config.get("domain_hosts", {})
 
 for key, value in optlist:
     if key == '-p':
@@ -83,10 +84,17 @@ for key, value in optlist:
 if not LOCAL_HOSTS:
     LOCAL_HOSTS = set(parse_hosts([VIRTUAL_PROXY_ADDR] if VIRTUAL_PROXY_ADDR else None))
 
+def config_domain_hosts():
+    if not DOMAIN_HOSTS:
+        return
+    import sevent
+    for domain, ip in DOMAIN_HOSTS.items():
+        sevent.DNSResolver.default()._hosts[domain] = ip
+
 def reload():
     global SERVER, REMOTE_PORT, BIND_ADDR, PORT, SSPORT, KEY, METHOD, SESSION_ID, TIME_OUT,\
         LOG_LEVEL, MAX_CONNECTIONS, USE_RULE, LOCAL_NETWORK, LOCAL_HOSTS, PROXY_ADDR, PROXY_PORT,\
-        SSKEY, SSMETHOD, SSPROXYS, EDNS_CLIENT_SUBNETS, VIRTUAL_PROXY_ADDR
+        SSKEY, SSMETHOD, SSPROXYS, EDNS_CLIENT_SUBNETS, VIRTUAL_PROXY_ADDR, DOMAIN_HOSTS
 
     config = load_conf()
     SERVER = config.get('server', "127.0.0.1")
@@ -112,6 +120,7 @@ def reload():
         "8.8.8.8": "119.29.29.29"
     })
     VIRTUAL_PROXY_ADDR = config.get("virtual_proxy_addr")
+    DOMAIN_HOSTS = config.get("domain_hosts", {})
 
     if not LOCAL_HOSTS:
         LOCAL_HOSTS = set(parse_hosts([VIRTUAL_PROXY_ADDR] if VIRTUAL_PROXY_ADDR else None))
