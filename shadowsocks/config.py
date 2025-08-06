@@ -85,11 +85,16 @@ if not LOCAL_HOSTS:
     LOCAL_HOSTS = set(parse_hosts([VIRTUAL_PROXY_ADDR] if VIRTUAL_PROXY_ADDR else None))
 
 def config_domain_hosts():
-    if not DOMAIN_HOSTS:
+    if not DOMAIN_HOSTS or not isinstance(DOMAIN_HOSTS, dict):
         return
-    import sevent
+    from sevent.dns import DNSResolver, ensure_bytes
+    dns_resolver = DNSResolver.default()
     for domain, ip in DOMAIN_HOSTS.items():
-        sevent.DNSResolver.default()._hosts[domain] = ip
+        if not isinstance(domain, str) or not isinstance(ip, str):
+            continue
+        if not dns_resolver.is_ip(ip):
+            continue
+        dns_resolver._hosts[ensure_bytes(domain)] = ip
 
 def reload():
     global SERVER, REMOTE_PORT, BIND_ADDR, PORT, SSPORT, KEY, METHOD, SESSION_ID, TIME_OUT,\
